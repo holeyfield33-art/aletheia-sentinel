@@ -8,6 +8,7 @@ tool execution that produced it, and detect tampering anywhere in between?
 from __future__ import annotations
 
 import dataclasses
+import json
 
 import pytest
 
@@ -104,9 +105,43 @@ def test_to_jsonl_serializes_every_receipt(hmac_secret: bytes, session_id: str) 
 
     jsonl = chain.to_jsonl()
     lines = jsonl.splitlines()
-    assert len(lines) == 2
-    assert '"tool_name": "a"' in lines[0]
-    assert '"tool_name": "b"' in lines[1]
+    # First line is the metadata header; receipts follow.
+    assert len(lines) == 3
+    header = json.loads(lines[0])
+    assert header["_sentinel_chain"] == "v1"
+    assert header["session_id"] == session_id
+    assert '"tool_name": "a"' in lines[1]
+    assert '"tool_name": "b"' in lines[2]
+
+
+def test_from_jsonl_round_trips_chain(hmac_secret: bytes, session_id: str) -> None:
+    chain = ReceiptChain(secret=hmac_secret, session_id=session_id)
+    chain.append("volatility.pslist", b"{}", b'{"pids":[1]}')
+    chain.append("plaso.log2timeline", b"{}", b'{"events":42}')
+
+    restored = ReceiptChain.from_jsonl(chain.to_jsonl(), secret=hmac_secret)
+    restored.verify()  # must not raise
+    assert restored.length == 2
+    assert restored.session_id == session_id
+
+
+def test_from_jsonl_wrong_secret_raises(hmac_secret: bytes, session_id: str) -> None:
+    chain = ReceiptChain(secret=hmac_secret, session_id=session_id)
+    chain.append("volatility.pslist", b"{}", b'{"pids":[1]}')
+
+    restored = ReceiptChain.from_jsonl(chain.to_jsonl(), secret=b"wrong-secret-zzz")
+    with pytest.raises(ChainIntegrityError, match="HMAC signature invalid"):
+        restored.verify()
+
+
+def test_from_jsonl_empty_raises(hmac_secret: bytes) -> None:
+    with pytest.raises(ValueError, match="empty"):
+        ReceiptChain.from_jsonl("", secret=hmac_secret)
+
+
+def test_from_jsonl_missing_header_raises(hmac_secret: bytes) -> None:
+    with pytest.raises(ValueError, match="header"):
+        ReceiptChain.from_jsonl('{"sequence": 0}', secret=hmac_secret)
 
 
 def test_empty_secret_rejected(session_id: str) -> None:

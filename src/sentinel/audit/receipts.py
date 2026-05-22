@@ -176,8 +176,57 @@ class ReceiptChain:
         return tuple(self._receipts)
 
     def to_jsonl(self) -> str:
-        """Serialize the chain as JSON Lines for on-disk persistence."""
-        return "\n".join(r.to_json() for r in self._receipts)
+        """Serialize the chain as JSON Lines for on-disk persistence.
+
+        First line: metadata header with session_id and format version,
+        required by from_jsonl() to reconstruct the chain without any
+        out-of-band information.
+        """
+        header = json.dumps(
+            {"_sentinel_chain": "v1", "session_id": self._session_id},
+            sort_keys=True,
+        )
+        lines = [header] + [r.to_json() for r in self._receipts]
+        return "\n".join(lines)
+
+    @classmethod
+    def from_jsonl(cls, data: str, secret: bytes) -> ReceiptChain:
+        """Reconstruct a ReceiptChain from its to_jsonl() serialization.
+
+        Raises ValueError if the header is missing or malformed.
+        Does NOT call verify() -- the caller must do that to confirm integrity.
+        """
+        lines = [line for line in data.splitlines() if line.strip()]
+        if not lines:
+            raise ValueError("JSONL data is empty")
+
+        header = json.loads(lines[0])
+        if not isinstance(header, dict) or "_sentinel_chain" not in header:
+            raise ValueError(
+                "First line must be a Sentinel chain header "
+                '({"_sentinel_chain": "v1", "session_id": ...})'
+            )
+
+        session_id = str(header.get("session_id", ""))
+        if not session_id:
+            raise ValueError("Chain header is missing session_id")
+
+        chain = cls(secret=secret, session_id=session_id)
+        for line in lines[1:]:
+            obj = json.loads(line)
+            receipt = Receipt(
+                sequence=int(obj["sequence"]),
+                timestamp_ns=int(obj["timestamp_ns"]),
+                tool_name=str(obj["tool_name"]),
+                input_sha256=str(obj["input_sha256"]),
+                output_sha256=str(obj["output_sha256"]),
+                prev_digest=str(obj["prev_digest"]),
+                digest=str(obj["digest"]),
+                signature=str(obj["signature"]),
+            )
+            chain._receipts.append(receipt)  # noqa: SLF001
+
+        return chain
 
 
 def _canonical_body(
