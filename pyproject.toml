@@ -12,6 +12,7 @@ requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.7",
     "mcp>=1.2",
+    "anthropic>=0.40",
     "httpx>=0.27",
     "cryptography>=42",
 ]
@@ -41,6 +42,9 @@ files = ["src/sentinel", "tests"]
 [[tool.mypy.overrides]]
 module = ["mcp.*", "cryptography.*"]
 ignore_missing_imports = true
+
+[project.scripts]
+sentinel = "sentinel.cli:main"
 
 [tool.ruff]
 src = ["src"]
