@@ -1,67 +1,109 @@
+from __future__ import annotations
+
 from pathlib import Path
-from pydantic import BaseModel, field_validator
-from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+
+from sentinel.tools.base import ToolResult, ToolStatus
+
 from . import _subprocess
-from ..models import ToolResult, ToolStatus
+
+# Maps lowercase RegRipper output keys to AmcacheEntry field names.
+# "path" is always the last field in an entry and triggers entry creation.
+_KEY_MAP: dict[str, str] = {
+    "path": "program_path",
+    "sha1": "sha1",
+    "first run": "first_run",
+    "last modified": "last_modified",
+    "publisher": "publisher",
+    "product name": "product_name",
+    "product version": "product_version",
+}
+
 
 class AmcacheEntry(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     program_path: str
-    sha1: Optional[str] = None
-    first_run: Optional[str] = None
-    last_modified: Optional[str] = None
-    publisher: Optional[str] = None
-    product_name: Optional[str] = None
-    product_version: Optional[str] = None
+    sha1: str | None = None
+    first_run: str | None = None
+    last_modified: str | None = None
+    publisher: str | None = None
+    product_name: str | None = None
+    product_version: str | None = None
+
+    @field_validator("program_path")
+    @classmethod
+    def program_path_not_empty(cls, v: str) -> str:
+        if not v:
+            raise ValueError("program_path cannot be empty")
+        return v
+
 
 class AmcacheInput(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     hive_file: Path
 
-    @field_validator('hive_file')
+    @field_validator("hive_file")
     @classmethod
     def validate_hive(cls, v: Path) -> Path:
         if not v.exists() or not v.is_file():
             raise ValueError("hive_file must exist")
         return v
 
+
 class AmcachePayload(BaseModel):
-    entries: List[AmcacheEntry]
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    entries: list[AmcacheEntry]
+
 
 async def regripper_amcache(input_data: AmcacheInput) -> ToolResult:
-    """Typed wrapper for RegRipper amcache plugin"""
+    """Typed wrapper for RegRipper amcache plugin."""
     args = ["-p", "amcache", "-r", str(input_data.hive_file)]
-    
+
     try:
-        returncode, stdout, stderr = await _subprocess.run_tool("rip.pl", args, timeout_seconds=120.0)
-        
-        if returncode != 0:
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                payload=None,
-                notes=f"RegRipper failed: {stderr.decode()[:300]}"
-            )
-        
-        # Simple line-by-line parser (defensive)
-        entries = []
-        lines = stdout.decode().splitlines()
-        current = {}
-        for line in lines:
-            if ':' in line:
-                key, val = line.split(':', 1)
-                current[key.strip()] = val.strip()
-                if 'Path' in key:
-                    entries.append(AmcacheEntry(**{k.lower().replace(' ', '_'): v for k, v in current.items() if v}))
-                    current = {}
-        
-        payload = AmcachePayload(entries=entries)
-        return ToolResult(
-            status=ToolStatus.SUCCESS if entries else ToolStatus.PARTIAL,
-            payload=payload,
-            notes=f"Parsed {len(entries)} entries"
+        returncode, stdout, stderr = await _subprocess.run_tool(
+            "rip.pl", args, timeout_seconds=120.0
         )
-        
     except _subprocess.ToolBinaryNotFoundError as e:
-        return ToolResult(status=ToolStatus.ERROR, payload=None, notes=str(e))
+        return ToolResult(tool_name="regripper.amcache", status=ToolStatus.ERROR, error=str(e))
     except _subprocess.ToolTimeoutError as e:
-        return ToolResult(status=ToolStatus.ERROR, payload=None, notes=str(e))
-    except Exception as e:
-        return ToolResult(status=ToolStatus.ERROR, payload=None, notes=str(e))
+        return ToolResult(tool_name="regripper.amcache", status=ToolStatus.ERROR, error=str(e))
+
+    if returncode != 0:
+        return ToolResult(
+            tool_name="regripper.amcache",
+            status=ToolStatus.ERROR,
+            error=f"RegRipper failed: {stderr.decode()[:300]}",
+        )
+
+    entries: list[AmcacheEntry] = []
+    skip_notes: list[str] = []
+    current: dict[str, str] = {}
+
+    for line in stdout.decode().splitlines():
+        if ":" not in line:
+            continue
+        raw_key, _, val = line.partition(":")
+        key_lower = raw_key.strip().lower()
+        mapped = _KEY_MAP.get(key_lower)
+        if mapped is not None:
+            current[mapped] = val.strip()
+        # "path" is the final field of an entry; trigger creation on it
+        if key_lower == "path":
+            try:
+                entries.append(AmcacheEntry(**current))
+            except ValidationError as e:
+                skip_notes.append(f"Skipped amcache entry: {e}")
+            current = {}
+
+    status = ToolStatus.PARTIAL if (skip_notes or not entries) else ToolStatus.OK
+    payload = AmcachePayload(entries=entries)
+    return ToolResult(
+        tool_name="regripper.amcache",
+        status=status,
+        payload=payload.model_dump(mode="json"),
+        notes=skip_notes,
+    )

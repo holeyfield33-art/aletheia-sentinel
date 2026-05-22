@@ -1,78 +1,90 @@
+from __future__ import annotations
+
+import json
 from pathlib import Path
-from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+
+from sentinel.tools.base import ToolResult, ToolStatus
+
 from . import _subprocess
-from ..models import ToolResult, ToolStatus
+
 
 class Process(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     pid: int
     ppid: int
     name: str
     offset: str
     threads: int
-    handles: Optional[int] = None
-    session_id: Optional[int] = None
+    handles: int | None = None
+    session_id: int | None = None
     wow64: bool
-    create_time: Optional[str] = None
-    exit_time: Optional[str] = None
+    create_time: str | None = None
+    exit_time: str | None = None
+
 
 class PslistInput(BaseModel):
-    memory_image: Path
-    profile_hint: Optional[str] = None
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
-    @field_validator('memory_image')
+    memory_image: Path
+    profile_hint: str | None = None
+
+    @field_validator("memory_image")
     @classmethod
     def validate_memory_image(cls, v: Path) -> Path:
         if not v.exists() or not v.is_file():
             raise ValueError("memory_image must exist and be a readable file")
         return v
 
+
 class PslistPayload(BaseModel):
-    processes: List[Process]
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    processes: list[Process]
+
 
 async def volatility_pslist(input_data: PslistInput) -> ToolResult:
-    """Typed wrapper for Volatility 3 windows.pslist.PsList"""
+    """Typed wrapper for Volatility 3 windows.pslist.PsList."""
     args = ["-f", str(input_data.memory_image), "-r", "json", "windows.pslist.PsList"]
-    
+
     try:
         returncode, stdout, stderr = await _subprocess.run_tool("vol", args, timeout_seconds=180.0)
-        
-        if returncode != 0:
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                payload=None,
-                notes=f"Volatility exited with code {returncode}: {stderr.decode()[:500]}"
-            )
-        
-        try:
-            import json
-            data = json.loads(stdout.decode())
-            processes = []
-            for item in data:
-                try:
-                    proc = Process.model_validate(item)
-                    processes.append(proc)
-                except Exception as e:
-                    # Partial handling
-                    pass
-            
-            payload = PslistPayload(processes=processes)
-            return ToolResult(
-                status=ToolStatus.SUCCESS if processes else ToolStatus.PARTIAL,
-                payload=payload,
-                notes="Parsed successfully"
-            )
-            
-        except json.JSONDecodeError as e:
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                payload=None,
-                notes=f"Failed to parse JSON: {e}"
-            )
-            
     except _subprocess.ToolBinaryNotFoundError as e:
-        return ToolResult(status=ToolStatus.ERROR, payload=None, notes=str(e))
+        return ToolResult(tool_name="volatility.pslist", status=ToolStatus.ERROR, error=str(e))
     except _subprocess.ToolTimeoutError as e:
-        return ToolResult(status=ToolStatus.ERROR, payload=None, notes=str(e))
-    except Exception as e:
-        return ToolResult(status=ToolStatus.ERROR, payload=None, notes=str(e))
+        return ToolResult(tool_name="volatility.pslist", status=ToolStatus.ERROR, error=str(e))
+
+    if returncode != 0:
+        return ToolResult(
+            tool_name="volatility.pslist",
+            status=ToolStatus.ERROR,
+            error=f"Volatility exited with code {returncode}: {stderr.decode()[:500]}",
+        )
+
+    try:
+        data = json.loads(stdout.decode())
+    except json.JSONDecodeError as e:
+        return ToolResult(
+            tool_name="volatility.pslist",
+            status=ToolStatus.ERROR,
+            error=f"Failed to parse JSON: {e}",
+        )
+
+    processes: list[Process] = []
+    skip_notes: list[str] = []
+    for item in data:
+        try:
+            processes.append(Process.model_validate(item))
+        except ValidationError as e:
+            skip_notes.append(f"Skipped process entry: {e}")
+
+    status = ToolStatus.PARTIAL if (skip_notes or not processes) else ToolStatus.OK
+    payload = PslistPayload(processes=processes)
+    return ToolResult(
+        tool_name="volatility.pslist",
+        status=status,
+        payload=payload.model_dump(mode="json"),
+        notes=skip_notes,
+    )
