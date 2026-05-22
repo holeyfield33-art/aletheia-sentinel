@@ -24,6 +24,18 @@ flowchart TD
     end
 ```
 
+## Tool Surface
+
+The MCP server exposes **only** these five typed tools (Week 2 inventory):
+
+- `volatility_pslist(memory_image)` — Process list from memory image (Volatility 3)
+- `volatility_netscan(memory_image)` — Network connections (Volatility 3)
+- `regripper_amcache(hive_file)` — Amcache analysis via RegRipper
+- `plaso_log2timeline(image_path, output_dir)` — Full timeline (slow, outputs .plaso + sample)
+- `evtxecmd_security(evtx_path, include_event_ids=None)` — Filtered Security.evtx events
+
+All calls are Pydantic-validated. No raw shell access.
+
 ## Component responsibilities
 
 | Component | Role | Key invariant |
