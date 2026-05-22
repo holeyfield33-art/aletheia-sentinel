@@ -9,8 +9,8 @@ flowchart TD
     C -->|parsed ToolResult| B
     B -->|append| D[Receipt Chain\nHMAC + hash-linked]
     B -->|ToolResult| E[Nitpicker Agent\nLLM: consistency review]
-    E -->|accept / reject| B
-    B -->|reasoning sample| F[Spectral Gate\nGeometric Brain MCP]
+    E -->|NitpickerReview| B
+    B -->|reasoning text| F[Spectral Gate\nGeometric Brain MCP]
     F -->|SpectralHealth| B
     B -->|accepted findings| G[Judge Agent\nLLM: synthesize report]
     G -->|SessionResult| H[Signed Report]
@@ -28,11 +28,11 @@ flowchart TD
 
 The MCP server exposes **only** these five typed tools (Week 2 inventory):
 
-- `volatility_pslist(memory_image)` — Process list from memory image (Volatility 3)
-- `volatility_netscan(memory_image)` — Network connections (Volatility 3)
-- `regripper_amcache(hive_file)` — Amcache analysis via RegRipper
-- `plaso_log2timeline(image_path, output_dir)` — Full timeline (slow, outputs .plaso + sample)
-- `evtxecmd_security(evtx_path, include_event_ids=None)` — Filtered Security.evtx events
+- `volatility_pslist(memory_image)` -- Process list from memory image (Volatility 3)
+- `volatility_netscan(memory_image)` -- Network connections (Volatility 3)
+- `regripper_amcache(hive_file)` -- Amcache analysis via RegRipper
+- `plaso_log2timeline(image_path, output_dir)` -- Full timeline (slow, outputs .plaso + sample)
+- `evtxecmd_security(evtx_path, include_event_ids=None)` -- Filtered Security.evtx events
 
 All calls are Pydantic-validated. No raw shell access.
 
@@ -44,9 +44,10 @@ All calls are Pydantic-validated. No raw shell access.
 | Orchestrator | Owns termination caps, receipt chain, routing | Caps checked FIRST on every iteration; no cap can be bypassed |
 | MCP Server | Exposes SIFT tools as typed Pydantic functions | No shell execution surface; destructive commands do not exist |
 | Receipt Chain | Append-only HMAC hash-linked audit log | `verify()` must pass before any report is produced |
-| Nitpicker | Reviews each fresh result for consistency | Rejection routes to `rejected` pile, not `findings` |
-| Spectral Gate | Scores reasoning coherence via GUE eigenvalue spacing | STRESSED = reject + increment counter; resets on HEALTHY |
+| Nitpicker | Reviews each fresh result for consistency | Returns NitpickerReview(accepted, reasoning); rejection routes to `rejected` pile |
+| Spectral Gate | Scores Nitpicker reasoning coherence via GUE eigenvalue spacing | STRESSED = reject + increment counter; resets on HEALTHY |
 | Judge | Synthesizes accepted findings into a final report | Reads-only `SessionState`; does not mutate |
+| Benchmark Harness | Measures agent accuracy against ground-truth cases | Computes precision/recall/F1 per case; records wall time |
 
 ## Trust boundary table
 
@@ -55,7 +56,7 @@ All calls are Pydantic-validated. No raw shell access.
 | MCP tool call | Orchestrator | MCP Server | in-process | Trusted | Typed Pydantic arguments; no shell interpolation |
 | SIFT subprocess | MCP Server | OS process | outbound | Untrusted output | Stdout is parsed into structured types before crossing back |
 | LLM API | Scout / Nitpicker / Judge | External LLM | outbound | Semi-trusted | Outputs are validated against typed schemas; hallucinations are caught by spectral gate |
-| Spectral gate | Orchestrator | geometric-brain-mcp.onrender.com | outbound HTTPS | External service | Response validated for numeric `r_ratio`; missing field raises ValueError, not silent HEALTHY |
+| Spectral gate | Orchestrator | geometric-brain-mcp.onrender.com | outbound HTTPS | External service | Response validated for numeric `r_ratio`; missing field raises ValueError, not silent HEALTHY; network failure returns CAUTION |
 | Evidence images | MCP Server | Disk | read-only | Untrusted data | Never committed to git; never sent to LLM directly |
 | Receipt chain | Orchestrator | Memory / disk | internal | Trusted at write, verified at read | `verify()` re-validates HMAC and hash pointers before final report |
 
@@ -78,8 +79,8 @@ is called, so a cap violation at iteration N is detected before N+1 begins.
 ```
 Nitpicker reviews ToolResult
         |
-        v
-Spectral Gate scores reasoning sample
+        v  (NitpickerReview.reasoning fed to gate)
+Spectral Gate scores reasoning prose via brain_health_check
         |
    r >= 0.55?  --> HEALTHY  --> reset counter, append to findings
    r >= 0.40?  --> CAUTION  --> treat same as HEALTHY (accept)
@@ -87,6 +88,54 @@ Spectral Gate scores reasoning sample
                                 if counter >= max_consecutive_stressed: ABORT
 ```
 
+The gate now receives the Nitpicker's actual reasoning text (not raw tool
+JSON). This makes the spectral analysis meaningful: hallucinations manifest
+in natural-language prose, not in the structured output they evaluated.
+
 The gate is wired to `https://geometric-brain-mcp.onrender.com/mcp` in
-production. Tests inject `FixedSpectralGate` for deterministic behaviour
-without network calls.
+production using the MCP JSON-RPC protocol. Tests inject `FixedSpectralGate`
+for deterministic behaviour without network calls. Network failures (ConnectError,
+TimeoutException, HTTPStatusError) return CAUTION rather than STRESSED to avoid
+penalising the session for infrastructure problems.
+
+## Measurement
+
+### Accuracy Benchmark Methodology
+
+The benchmark harness (`sentinel.benchmark`) addresses hackathon criterion #2
+(IR Accuracy) by providing **measured** precision/recall/F1 against ground-truth
+cases, rather than relying on subjective assessment.
+
+**How it works:**
+
+1. Each `Case` specifies a list of `ExpectedFinding` objects -- the ground
+   truth for what the agent *should* discover in that scenario.
+2. The benchmark runner creates a fresh `Orchestrator` per case (independent
+   receipt chains, no state bleed between cases).
+3. After the session completes, `compute_score()` compares the accepted
+   `findings` in `SessionResult.state` against the expected findings.
+4. **Matching rule**: a reported finding matches an expected finding when all
+   `key_fields` are present in the tool result payload:
+   - String values: substring match (expected value must appear inside actual value)
+   - Numeric values (int/float in payload): exact float comparison
+5. Standard IR metrics are computed: Precision = TP / (TP + FP),
+   Recall = TP / (TP + FN), F1 = harmonic mean.
+
+**Edge-case conventions:**
+- Both expected and reported empty: P=R=F1=1.0 (trivially correct).
+- Expected empty, reported non-empty: P=0.0 (all spurious).
+- Reported empty, expected non-empty: R=0.0 (all missed), P=1.0 (no FP).
+
+**Three fixture scenarios** are provided under `benchmark/fixtures/`:
+1. Credential theft (mimikatz in memory, C2 connection)
+2. Lateral movement (PsExec service install in Security.evtx)
+3. Persistence via PowerShell-Empire stager (Amcache evidence)
+
+These are **demonstration cases** pointing to hypothetical evidence paths.
+Real accuracy numbers require actual SIFT evidence and a running SIFT
+Workstation.
+
+**CLI:**
+```bash
+sentinel benchmark --cases benchmark/fixtures/cases.json --output report.md
+```
