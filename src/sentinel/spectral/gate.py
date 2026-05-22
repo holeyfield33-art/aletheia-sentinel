@@ -14,9 +14,13 @@ path with real value, and that is what production wiring will use.
 
 from __future__ import annotations
 
+import logging
+
 import httpx
 
 from sentinel.agents.orchestrator import SpectralHealth
+
+log = logging.getLogger(__name__)
 
 # Calibration thresholds from Geometric Brain validation runs.
 # Tune as we collect more data during the sprint.
@@ -25,7 +29,18 @@ CAUTION_MIN_R = 0.40
 
 
 class RemoteSpectralGate:
-    """Production spectral gate: calls geometric-brain-mcp."""
+    """Production spectral gate: calls geometric-brain-mcp.
+
+    Sends MCP JSON-RPC requests to the brain_health_check tool and maps the
+    returned r_ratio to a SpectralHealth classification.
+
+    Network failures return CAUTION rather than HEALTHY or STRESSED. This is a
+    deliberate design choice: when the remote service is unavailable we degrade
+    gracefully by signalling reduced confidence without blocking the agent.
+    STRESSED would incorrectly penalise the session for an infrastructure
+    problem; HEALTHY would suppress the confidence warning entirely. CAUTION
+    means "unknown health -- proceed conservatively."
+    """
 
     def __init__(
         self,
@@ -42,16 +57,34 @@ class RemoteSpectralGate:
             # rather than HEALTHY so the orchestrator stays conservative.
             return SpectralHealth.CAUTION
 
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            response = await client.post(
-                self._endpoint,
-                json={
-                    "tool": "brain_health_check",
-                    "arguments": {"text": sample},
-                },
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "brain_health_check",
+                "arguments": {"text": sample},
+            },
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.post(self._endpoint, json=payload)
+                response.raise_for_status()
+                body: dict[str, object] = response.json()
+        except httpx.ConnectError as exc:
+            log.warning("spectral gate connect error (returning CAUTION): %s", exc)
+            return SpectralHealth.CAUTION
+        except httpx.TimeoutException as exc:
+            log.warning("spectral gate timeout (returning CAUTION): %s", exc)
+            return SpectralHealth.CAUTION
+        except httpx.HTTPStatusError as exc:
+            log.warning(
+                "spectral gate HTTP %d (returning CAUTION): %s",
+                exc.response.status_code,
+                exc,
             )
-            response.raise_for_status()
-            body: dict[str, object] = response.json()
+            return SpectralHealth.CAUTION
 
         r_ratio = _extract_r_ratio(body)
         return classify(r_ratio)
@@ -86,8 +119,9 @@ def classify(r_ratio: float) -> SpectralHealth:
 def _extract_r_ratio(body: dict[str, object]) -> float:
     """Pull the r-ratio out of a brain_health_check response.
 
-    Geometric Brain returns r_ratio at the top level. If the schema shifts
-    we fail loud rather than silently treating drift as HEALTHY.
+    Geometric Brain returns r_ratio either at the top level or nested under
+    the JSON-RPC ``result`` key. If the schema shifts we fail loud rather than
+    silently treating drift as HEALTHY.
     """
     value = body.get("r_ratio")
     if value is None:

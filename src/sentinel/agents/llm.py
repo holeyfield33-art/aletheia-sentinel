@@ -14,7 +14,7 @@ from typing import Any
 import anthropic
 from anthropic.types import Message
 
-from sentinel.agents.orchestrator import ScoutDecision, SessionState
+from sentinel.agents.orchestrator import NitpickerReview, ScoutDecision, SessionState
 from sentinel.tools.base import ToolResult
 
 _MODEL = "claude-opus-4-7"
@@ -134,7 +134,7 @@ class ClaudeNitpicker:
     def __init__(self, *, client: anthropic.AsyncAnthropic) -> None:
         self._client = client
 
-    async def review(self, state: SessionState, fresh: ToolResult) -> bool:
+    async def review(self, state: SessionState, fresh: ToolResult) -> NitpickerReview:
         fresh_json = json.dumps(fresh.model_dump(mode="json"), indent=2)
         findings_json = json.dumps(
             [f.model_dump(mode="json") for f in state.findings],
@@ -148,17 +148,18 @@ class ClaudeNitpicker:
         try:
             response = await self._client.messages.create(
                 model=_MODEL,
-                max_tokens=16,
+                max_tokens=128,
                 system=_NITPICKER_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
             )
         except anthropic.APIConnectionError:
-            return False
+            return NitpickerReview(accepted=False, reasoning="connection error")
         except anthropic.APIError:
-            return False
+            return NitpickerReview(accepted=False, reasoning="api error")
 
-        text = _extract_text(response).strip().upper()
-        return text.startswith("YES")
+        reasoning = _extract_text(response)
+        accepted = reasoning.strip().upper().startswith("YES")
+        return NitpickerReview(accepted=accepted, reasoning=reasoning)
 
 
 class ClaudeJudge:

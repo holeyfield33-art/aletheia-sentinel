@@ -105,6 +105,19 @@ class ScoutDecision:
     tool_args: dict[str, object] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class NitpickerReview:
+    """The Nitpicker's verdict on a single tool result.
+
+    ``accepted`` mirrors the previous bool return value.
+    ``reasoning`` is the natural-language explanation that gets fed into the
+    spectral gate so hallucination detection runs on actual prose, not JSON.
+    """
+
+    accepted: bool
+    reasoning: str
+
+
 @runtime_checkable
 class ScoutAgent(Protocol):
     """Plans the next forensic tool call."""
@@ -116,12 +129,11 @@ class ScoutAgent(Protocol):
 class NitpickerAgent(Protocol):
     """Reviews a fresh tool result against accumulated findings.
 
-    Returns True if the result is consistent with the existing finding set
-    (accept), False if a discrepancy was found and the result should be
-    re-investigated.
+    Returns a NitpickerReview whose ``accepted`` flag routes the result and
+    whose ``reasoning`` text is scored by the spectral gate.
     """
 
-    async def review(self, state: SessionState, fresh: ToolResult) -> bool: ...
+    async def review(self, state: SessionState, fresh: ToolResult) -> NitpickerReview: ...
 
 
 @runtime_checkable
@@ -216,10 +228,10 @@ class Orchestrator:
             )
             result_with_seq = result.with_receipt(receipt.sequence)
 
-            accepted = await self._nitpicker.review(state, result_with_seq)
-            health = await self._gate.evaluate(_review_sample(result_with_seq))
+            review = await self._nitpicker.review(state, result_with_seq)
+            health = await self._gate.evaluate(review.reasoning)
 
-            if health is SpectralHealth.STRESSED or not accepted:
+            if health is SpectralHealth.STRESSED or not review.accepted:
                 state.rejected.append(result_with_seq)
                 state.consecutive_stressed += 1
                 continue
@@ -242,14 +254,3 @@ class Orchestrator:
 def _canonical_args(args: dict[str, object]) -> bytes:
     """Canonical JSON encoding of Scout's tool args for the receipt chain."""
     return json.dumps(args, sort_keys=True, default=str).encode("utf-8")
-
-
-def _review_sample(result: ToolResult) -> str:
-    """Extract a reasoning sample for the spectral gate.
-
-    Today we feed the canonical JSON of the tool result. A future iteration
-    will feed the Nitpicker's natural-language reasoning instead -- that's the
-    actual surface where hallucinations manifest. The gate signature is
-    forward-compatible: still takes a string.
-    """
-    return result.to_canonical_bytes().decode("utf-8", errors="replace")
