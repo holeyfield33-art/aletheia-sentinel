@@ -1,0 +1,29 @@
+{
+  "case_id": "fixture-003-persistence-empire",
+  "description": "Persistence mechanism scenario: PowerShell-Empire stager installed as a scheduled task to survive reboots. Amcache.hve records the execution of a renamed powershell.exe launcher and the Invoke-Empire module. Evidence: Amcache.hve from a compromised endpoint.",
+  "expected_findings": [
+    {
+      "type": "amcache_entry",
+      "key_fields": {
+        "name": "powershell.exe",
+        "path": "empire_launcher"
+      }
+    },
+    {
+      "type": "amcache_entry",
+      "key_fields": {
+        "name": "Invoke-Empire"
+      }
+    },
+    {
+      "type": "scheduled_task",
+      "key_fields": {
+        "task_name": "WindowsUpdate",
+        "command": "powershell"
+      }
+    }
+  ],
+  "evidence_paths": {
+    "hive_file": "/evidence/fixture-003/Amcache.hve"
+  }
+}

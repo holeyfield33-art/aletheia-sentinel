@@ -1,0 +1,91 @@
+[
+  {
+    "case_id": "fixture-001-credential-theft",
+    "description": "Credential theft scenario: mimikatz.exe detected active in memory with an open network connection to an attacker-controlled C2 server on port 4444. LSASS memory access is visible in the process tree. Evidence: Windows memory image from a compromised workstation.",
+    "expected_findings": [
+      {
+        "type": "process",
+        "key_fields": {
+          "name": "mimikatz.exe",
+          "pid": "1234"
+        }
+      },
+      {
+        "type": "connection",
+        "key_fields": {
+          "remote_ip": "192.168.100.5",
+          "remote_port": "4444"
+        }
+      },
+      {
+        "type": "process",
+        "key_fields": {
+          "name": "lsass.exe",
+          "anomaly": "unexpected_child"
+        }
+      }
+    ],
+    "evidence_paths": {
+      "memory_image": "/evidence/fixture-001/win10-workstation.vmem"
+    }
+  },
+  {
+    "case_id": "fixture-002-lateral-movement",
+    "description": "Lateral movement scenario: attacker used PsExec to pivot from a compromised workstation to a file server. Security.evtx shows Service Install (Event ID 7045) for PSEXESVC and a corresponding Type-3 network logon.",
+    "expected_findings": [
+      {
+        "type": "service_install",
+        "key_fields": {
+          "service_name": "PSEXESVC",
+          "event_id": "7045"
+        }
+      },
+      {
+        "type": "logon",
+        "key_fields": {
+          "event_id": "4624",
+          "logon_type": "3"
+        }
+      },
+      {
+        "type": "logon",
+        "key_fields": {
+          "event_id": "4776",
+          "source_workstation": "COMPROMISED-WS01"
+        }
+      }
+    ],
+    "evidence_paths": {
+      "evtx_path": "/evidence/fixture-002/Security.evtx"
+    }
+  },
+  {
+    "case_id": "fixture-003-persistence-empire",
+    "description": "Persistence mechanism scenario: PowerShell-Empire stager installed as a scheduled task. Amcache.hve records the execution of a renamed powershell.exe launcher and the Invoke-Empire module.",
+    "expected_findings": [
+      {
+        "type": "amcache_entry",
+        "key_fields": {
+          "name": "powershell.exe",
+          "path": "empire_launcher"
+        }
+      },
+      {
+        "type": "amcache_entry",
+        "key_fields": {
+          "name": "Invoke-Empire"
+        }
+      },
+      {
+        "type": "scheduled_task",
+        "key_fields": {
+          "task_name": "WindowsUpdate",
+          "command": "powershell"
+        }
+      }
+    ],
+    "evidence_paths": {
+      "hive_file": "/evidence/fixture-003/Amcache.hve"
+    }
+  }
+]

@@ -1,0 +1,30 @@
+{
+  "case_id": "fixture-002-lateral-movement",
+  "description": "Lateral movement scenario: attacker used PsExec to pivot from a compromised workstation to a file server. Security.evtx shows Service Install (Event ID 7045) for PSEXESVC and a corresponding Type-3 network logon. Evidence: Security.evtx from the target file server.",
+  "expected_findings": [
+    {
+      "type": "service_install",
+      "key_fields": {
+        "service_name": "PSEXESVC",
+        "event_id": "7045"
+      }
+    },
+    {
+      "type": "logon",
+      "key_fields": {
+        "event_id": "4624",
+        "logon_type": "3"
+      }
+    },
+    {
+      "type": "logon",
+      "key_fields": {
+        "event_id": "4776",
+        "source_workstation": "COMPROMISED-WS01"
+      }
+    }
+  ],
+  "evidence_paths": {
+    "evtx_path": "/evidence/fixture-002/Security.evtx"
+  }
+}
