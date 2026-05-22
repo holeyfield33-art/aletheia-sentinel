@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from sentinel.agents.llm import ClaudeJudge, ClaudeNitpicker, ClaudeScout
 from sentinel.agents.orchestrator import (
+    NitpickerReview,
     Orchestrator,
     OrchestratorConfig,
     ScoutDecision,
@@ -160,8 +161,8 @@ async def test_stressed_gate_stops_session(hmac_secret: bytes, session_id: str) 
 
     @dataclass
     class AcceptAll:
-        async def review(self, state: SessionState, fresh: ToolResult) -> bool:
-            return True
+        async def review(self, state: SessionState, fresh: ToolResult) -> NitpickerReview:
+            return NitpickerReview(accepted=True, reasoning="auto-accepted")
 
     @dataclass
     class SimpleJudge:
@@ -226,15 +227,16 @@ async def test_claude_scout_malformed_json_returns_fallback() -> None:
 
 
 async def test_claude_nitpicker_ambiguous_response_returns_false() -> None:
-    """Nitpicker returns False whenever the response is not a clear YES."""
+    """Nitpicker returns accepted=False whenever the response is not a clear YES."""
     client = _mock_client("I am not sure about this one.")
     nitpicker = ClaudeNitpicker(client=client)
     state = SessionState(case_id="case-int-004")
     fresh = ToolResult(tool_name="volatility.pslist", status=ToolStatus.OK)
 
-    accepted = await nitpicker.review(state, fresh)
+    review = await nitpicker.review(state, fresh)
 
-    assert accepted is False
+    assert review.accepted is False
+    assert review.reasoning == "I am not sure about this one."
 
 
 # ---------------------------------------------------------------------------
@@ -243,15 +245,16 @@ async def test_claude_nitpicker_ambiguous_response_returns_false() -> None:
 
 
 async def test_claude_nitpicker_yes_accepts_result() -> None:
-    """Nitpicker returns True when Claude responds with YES."""
+    """Nitpicker returns accepted=True when Claude responds with YES."""
     client = _mock_client("YES")
     nitpicker = ClaudeNitpicker(client=client)
     state = SessionState(case_id="case-int-005")
     fresh = ToolResult(tool_name="volatility.pslist", status=ToolStatus.OK)
 
-    accepted = await nitpicker.review(state, fresh)
+    review = await nitpicker.review(state, fresh)
 
-    assert accepted is True
+    assert review.accepted is True
+    assert review.reasoning == "YES"
 
 
 # ---------------------------------------------------------------------------

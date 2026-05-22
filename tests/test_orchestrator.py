@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 import pytest
 
 from sentinel.agents.orchestrator import (
+    NitpickerReview,
     Orchestrator,
     OrchestratorConfig,
     ScoutDecision,
@@ -51,8 +52,8 @@ class FixedNitpicker:
 
     accept: bool = True
 
-    async def review(self, state: SessionState, fresh: ToolResult) -> bool:
-        return self.accept
+    async def review(self, state: SessionState, fresh: ToolResult) -> NitpickerReview:
+        return NitpickerReview(accepted=self.accept, reasoning="fixed verdict")
 
 
 @dataclass
