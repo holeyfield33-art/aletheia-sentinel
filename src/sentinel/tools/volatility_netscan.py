@@ -5,8 +5,9 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
-from . import _subprocess
 from sentinel.tools.base import ToolResult, ToolStatus
+
+from . import _subprocess
 
 
 class Connection(BaseModel):

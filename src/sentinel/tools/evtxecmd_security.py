@@ -6,8 +6,9 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
-from . import _subprocess
 from sentinel.tools.base import ToolResult, ToolStatus
+
+from . import _subprocess
 
 _DEFAULT_EVENT_IDS: list[int] = [
     4624, 4625, 4634, 4648, 4672, 4688, 4720, 4732, 4738, 4768, 4769, 4776, 7045, 4697
