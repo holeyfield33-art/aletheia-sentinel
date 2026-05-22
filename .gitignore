@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.installed.cfg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Secrets and local config
+.env
+.env.local
+*.pem
+*.key
+secrets/
+
+# Case evidence (NEVER commit forensic artifacts)
+cases/
+evidence/
+*.raw
+*.E01
+*.dd
+*.vmem
+*.aff4
+
+# Receipt chains and logs
+audit-logs/
+receipts/
+*.jsonl
+
+# OS
+.DS_Store
+Thumbs.db
