@@ -49,7 +49,9 @@ _IGNORED_EVENT: dict[str, Any] = {
 def _make_evtx_writer(events: list[dict[str, Any]]) -> Any:
     """Return a side_effect that writes the JSON events to the --json output path."""
 
-    async def _mock(binary: str, args: list[str], *, timeout_seconds: float = 300.0) -> tuple[int, bytes, bytes]:
+    async def _mock(
+        binary: str, args: list[str], *, timeout_seconds: float = 300.0
+    ) -> tuple[int, bytes, bytes]:
         idx = args.index("--json")
         Path(args[idx + 1]).write_text(json.dumps(events))
         return (0, b"", b"")
@@ -83,7 +85,9 @@ async def test_happy_path(dummy_evtx: Path) -> None:
 
 
 async def test_parser_error_bad_json(dummy_evtx: Path) -> None:
-    async def _bad_mock(binary: str, args: list[str], *, timeout_seconds: float = 300.0) -> tuple[int, bytes, bytes]:
+    async def _bad_mock(
+        binary: str, args: list[str], *, timeout_seconds: float = 300.0
+    ) -> tuple[int, bytes, bytes]:
         idx = args.index("--json")
         Path(args[idx + 1]).write_text("this is not json ][")
         return (0, b"", b"")

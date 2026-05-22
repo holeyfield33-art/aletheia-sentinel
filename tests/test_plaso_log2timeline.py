@@ -38,7 +38,9 @@ def _make_psort_writer(output_dir: Path, events: list[dict[str, Any]]) -> Any:
     """Return an AsyncMock side_effect that writes psort JSON on the second call."""
     call_count = 0
 
-    async def _mock(binary: str, args: list[str], *, timeout_seconds: float = 300.0) -> tuple[int, bytes, bytes]:
+    async def _mock(
+        binary: str, args: list[str], *, timeout_seconds: float = 300.0
+    ) -> tuple[int, bytes, bytes]:
         nonlocal call_count
         call_count += 1
         if binary == "psort.py":
@@ -83,7 +85,9 @@ async def test_happy_path(image_file: Path, output_dir: Path) -> None:
 
 
 async def test_parser_error_bad_json(image_file: Path, output_dir: Path) -> None:
-    async def _mock(binary: str, args: list[str], *, timeout_seconds: float = 300.0) -> tuple[int, bytes, bytes]:
+    async def _mock(
+        binary: str, args: list[str], *, timeout_seconds: float = 300.0
+    ) -> tuple[int, bytes, bytes]:
         if binary == "psort.py":
             idx = args.index("--output-file")
             Path(args[idx + 1]).write_text("not json {{{{")
@@ -139,7 +143,9 @@ async def test_binary_not_found_log2timeline(image_file: Path, output_dir: Path)
 async def test_timeout_psort(image_file: Path, output_dir: Path) -> None:
     call_count = 0
 
-    async def _mock(binary: str, args: list[str], *, timeout_seconds: float = 300.0) -> tuple[int, bytes, bytes]:
+    async def _mock(
+        binary: str, args: list[str], *, timeout_seconds: float = 300.0
+    ) -> tuple[int, bytes, bytes]:
         nonlocal call_count
         call_count += 1
         if binary == "psort.py":
