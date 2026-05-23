@@ -35,7 +35,7 @@ class SecurityEvent(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _normalize_evtx_fields(cls, data: Any) -> dict[str, Any]:
+    def _normalize_evtx_fields(cls, data: Any) -> Any:
         if not isinstance(data, dict):
             return data
         # Build payload_summary from PayloadData1..6 (real format) or Payload (legacy mock)

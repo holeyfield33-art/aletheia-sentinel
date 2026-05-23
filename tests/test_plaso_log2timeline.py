@@ -182,7 +182,7 @@ async def test_log2timeline_nonzero_exit(image_file: Path, output_dir: Path) -> 
 async def test_parses_real_tool_output(image_file: Path, output_dir: Path) -> None:
     # Real psort -o json field names; also includes parser-specific extras
     # (display_name, parser, tag) that the wrapper must silently strip.
-    real_events = [
+    real_events: list[dict[str, Any]] = [
         {
             "datetime": "2023-01-01T00:00:00Z",
             "timestamp_desc": "File Modified",
