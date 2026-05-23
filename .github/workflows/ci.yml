@@ -36,3 +36,17 @@ jobs:
           # See SECURITY.md for vulnerability reporting.
           ALETHEIA_RECEIPT_SECRET: TEST_FIXTURE_NOT_A_REAL_HMAC_KEY_DO_NOT_FLAG_AS_SECRET
         run: pytest
+
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install scanners
+        run: pip install bandit semgrep
+      - name: Bandit (HIGH severity only)
+        run: bandit -r src/ --severity-level high
+      - name: Semgrep
+        run: semgrep --config=auto src/ --error
