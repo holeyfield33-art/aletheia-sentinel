@@ -9,12 +9,16 @@ from sentinel.tools.base import ToolResult, ToolStatus
 from . import _subprocess
 
 # Maps lowercase RegRipper output keys to AmcacheEntry field names.
-# "path" is always the last field in an entry and triggers entry creation.
+# "path"/"full_path" are the terminal fields of an entry and trigger creation.
+# Both "last modified" (space) and "last_modified" (underscore) variants are
+# present depending on the RegRipper version / plugin output style.
 _KEY_MAP: dict[str, str] = {
     "path": "program_path",
+    "full_path": "program_path",
     "sha1": "sha1",
     "first run": "first_run",
     "last modified": "last_modified",
+    "last_modified": "last_modified",
     "publisher": "publisher",
     "product name": "product_name",
     "product version": "product_version",
@@ -91,8 +95,8 @@ async def regripper_amcache(input_data: AmcacheInput) -> ToolResult:
         mapped = _KEY_MAP.get(key_lower)
         if mapped is not None:
             current[mapped] = val.strip()
-        # "path" is the final field of an entry; trigger creation on it
-        if key_lower == "path":
+        # "path" or "full_path" is the terminal field; trigger entry creation
+        if key_lower in {"path", "full_path"}:
             try:
                 entries.append(AmcacheEntry(**current))
             except ValidationError as e:

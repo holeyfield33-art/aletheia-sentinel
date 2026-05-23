@@ -194,9 +194,9 @@ def main() -> None:
         if skip_notes_a:
             print(f"  First skip : {skip_notes_a[0][:120]}")
         print()
-        print("FINDING: The wrapper uses Pydantic field names (pid, ppid, name, ...)")
-        print("Real vol3 JSON uses column names (PID, PPID, ImageFileName, ...).")
-        print("Without field aliasing, all real vol3 rows fail Pydantic validation.")
+        print("RE-VALIDATION (post-fix): Field aliases + populate_by_name=True applied.")
+        print("Real vol3 JSON (PID, PPID, ImageFileName, ...) is now parsed correctly.")
+        print("TreeGrid extras (__children, 'File output') are stripped before validation.")
         print()
 
         # -- Sample B: schema-conformant JSON -----------------------------------
@@ -221,11 +221,12 @@ def main() -> None:
         print()
 
         # -- Assertions ---------------------------------------------------------
-        assert result_a.status == ToolStatus.PARTIAL, (
-            f"Expected PARTIAL for real vol3 format, got {result_a.status}"
+        assert result_a.status == ToolStatus.OK, (
+            f"Expected OK for real vol3 format after fix, got {result_a.status}"
         )
-        assert len(parsed_a) == 0, (
-            f"Expected 0 parsed processes from real vol3 format, got {len(parsed_a)}"
+        assert len(parsed_a) == len(REAL_VOL3_JSON), (
+            f"Expected {len(REAL_VOL3_JSON)} parsed processes from real vol3 format, "
+            f"got {len(parsed_a)}"
         )
 
         assert result_b.status == ToolStatus.OK, (
@@ -239,7 +240,7 @@ def main() -> None:
         print()
         print("SUMMARY")
         print("-------")
-        print(f"Real vol3 JSON  -> {len(parsed_a)}/{len(REAL_VOL3_JSON)} parsed (field-name mismatch)")
+        print(f"Real vol3 JSON  -> {len(parsed_a)}/{len(REAL_VOL3_JSON)} parsed (FIXED)")
         print(f"Schema JSON     -> {len(parsed_b)}/{len(SCHEMA_CONFORMANT_JSON)} parsed (all OK)")
 
 

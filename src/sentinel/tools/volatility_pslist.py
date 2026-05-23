@@ -3,26 +3,29 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from sentinel.tools.base import ToolResult, ToolStatus
 
 from . import _subprocess
 
+# Fields vol3 adds to every TreeGrid row that are not part of the process model.
+_VOL3_PSLIST_STRIP: frozenset[str] = frozenset({"__children", "File output"})
+
 
 class Process(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
-    pid: int
-    ppid: int
-    name: str
-    offset: str
-    threads: int
-    handles: int | None = None
-    session_id: int | None = None
-    wow64: bool
-    create_time: str | None = None
-    exit_time: str | None = None
+    pid: int = Field(alias="PID")
+    ppid: int = Field(alias="PPID")
+    name: str = Field(alias="ImageFileName")
+    offset: str = Field(alias="Offset(V)")
+    threads: int = Field(alias="Threads")
+    handles: int | None = Field(default=None, alias="Handles")
+    session_id: int | None = Field(default=None, alias="SessionId")
+    wow64: bool = Field(alias="Wow64")
+    create_time: str | None = Field(default=None, alias="CreateTime")
+    exit_time: str | None = Field(default=None, alias="ExitTime")
 
 
 class PslistInput(BaseModel):
@@ -75,8 +78,9 @@ async def volatility_pslist(input_data: PslistInput) -> ToolResult:
     processes: list[Process] = []
     skip_notes: list[str] = []
     for item in data:
+        clean = {k: v for k, v in item.items() if k not in _VOL3_PSLIST_STRIP}
         try:
-            processes.append(Process.model_validate(item))
+            processes.append(Process.model_validate(clean))
         except ValidationError as e:
             skip_notes.append(f"Skipped process entry: {e}")
 

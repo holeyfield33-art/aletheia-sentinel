@@ -3,26 +3,29 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from sentinel.tools.base import ToolResult, ToolStatus
 
 from . import _subprocess
 
+# Fields vol3 adds to every TreeGrid row that are not part of the connection model.
+_VOL3_NETSCAN_STRIP: frozenset[str] = frozenset({"__children"})
+
 
 class Connection(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
-    offset: str
-    protocol: str
-    local_address: str
-    local_port: int | None = None
-    foreign_address: str | None = None
-    foreign_port: int | None = None
-    state: str | None = None
-    pid: int | None = None
-    owner: str | None = None
-    created: str | None = None
+    offset: str = Field(alias="Offset")
+    protocol: str = Field(alias="Proto")
+    local_address: str = Field(alias="LocalAddr")
+    local_port: int | None = Field(default=None, alias="LocalPort")
+    foreign_address: str | None = Field(default=None, alias="ForeignAddr")
+    foreign_port: int | None = Field(default=None, alias="ForeignPort")
+    state: str | None = Field(default=None, alias="State")
+    pid: int | None = Field(default=None, alias="PID")
+    owner: str | None = Field(default=None, alias="Owner")
+    created: str | None = Field(default=None, alias="Created")
 
 
 class NetscanInput(BaseModel):
@@ -74,8 +77,9 @@ async def volatility_netscan(input_data: NetscanInput) -> ToolResult:
     connections: list[Connection] = []
     skip_notes: list[str] = []
     for item in data:
+        clean = {k: v for k, v in item.items() if k not in _VOL3_NETSCAN_STRIP}
         try:
-            connections.append(Connection.model_validate(item))
+            connections.append(Connection.model_validate(clean))
         except ValidationError as e:
             skip_notes.append(f"Skipped connection entry: {e}")
 
