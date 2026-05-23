@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from sentinel.tools.base import ToolResult, ToolStatus
 
@@ -14,18 +15,43 @@ _DEFAULT_EVENT_IDS: list[int] = [
     4624, 4625, 4634, 4648, 4672, 4688, 4720, 4732, 4738, 4768, 4769, 4776, 7045, 4697
 ]
 
+_PAYLOAD_FIELDS: tuple[str, ...] = (
+    "PayloadData1", "PayloadData2", "PayloadData3",
+    "PayloadData4", "PayloadData5", "PayloadData6",
+)
+
 
 class SecurityEvent(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
-    event_id: int
-    level: str
-    channel: str
-    computer: str
-    time_created: str
-    record_id: int
-    provider_name: str
+    event_id: int = Field(alias="EventId")
+    level: str = Field(alias="Level")
+    channel: str = Field(alias="Channel")
+    computer: str = Field(alias="Computer")
+    time_created: str = Field(alias="TimeCreated")
+    record_id: int = Field(alias="RecordNumber")
+    provider_name: str = Field(alias="Provider")
     payload_summary: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_evtx_fields(cls, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            return data
+        # Build payload_summary from PayloadData1..6 (real format) or Payload (legacy mock)
+        parts = [str(data[k]) for k in _PAYLOAD_FIELDS if data.get(k)]
+        payload_summary = " | ".join(parts) if parts else str(data.get("Payload", ""))[:200]
+        # Normalize field names: support both real EvtxECmd output and legacy mock keys
+        return {
+            "EventId": data.get("EventId") or data.get("EventID"),
+            "Level": data.get("Level", ""),
+            "Channel": data.get("Channel", ""),
+            "Computer": data.get("Computer", ""),
+            "TimeCreated": data.get("TimeCreated", ""),
+            "RecordNumber": data.get("RecordNumber") or data.get("RecordID", 0),
+            "Provider": data.get("Provider") or data.get("ProviderName", ""),
+            "payload_summary": payload_summary,
+        }
 
 
 class EvtxSecurityInput(BaseModel):
@@ -91,20 +117,12 @@ async def evtxecmd_security(input_data: EvtxSecurityInput) -> ToolResult:
         events: list[SecurityEvent] = []
         skip_notes: list[str] = []
         for item in data:
-            if item.get("EventID") not in filter_ids:
+            # Support both real EvtxECmd key ("EventId") and legacy mock key ("EventID")
+            event_id_raw = item.get("EventId") or item.get("EventID")
+            if event_id_raw not in filter_ids:
                 continue
             try:
-                evt = SecurityEvent(
-                    event_id=item["EventID"],
-                    level=item.get("Level", ""),
-                    channel=item.get("Channel", ""),
-                    computer=item.get("Computer", ""),
-                    time_created=item.get("TimeCreated", ""),
-                    record_id=item.get("RecordID", 0),
-                    provider_name=item.get("ProviderName", ""),
-                    payload_summary=str(item.get("Payload", ""))[:200],
-                )
-                events.append(evt)
+                events.append(SecurityEvent.model_validate(item))
             except ValidationError as e:
                 skip_notes.append(f"Skipped event: {e}")
 
