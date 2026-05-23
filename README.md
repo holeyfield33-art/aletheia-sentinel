@@ -40,8 +40,9 @@ Three structural differentiators, not just better prompts:
   [Geometric Brain MCP server](https://geometric-brain-mcp.onrender.com),
   which measures GUE eigenvalue spacing as a proxy for reasoning coherence.
   When the agent's reasoning drifts from a healthy manifold (r < 0.40),
-  the finding is rejected and re-investigated. This catches hallucinations that
-  pass the Nitpicker's own consistency check -- a second opinion from statistics.
+  the finding is rejected and re-investigated. This is spectral self-correction
+  infrastructure (calibration against hallucination ground truth is parallel
+  research -- see accuracy report).
 
 ---
 

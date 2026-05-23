@@ -109,3 +109,41 @@ The ground-truth evidence files are not committed to git (enforced by .gitignore
 - Nitpicker consistency judgements
 - Judge report quality
 - F1 accuracy on real evidence (requires real SIFT environment)
+
+---
+
+## Known Limitations
+
+### Spectral Gate Calibration
+
+The spectral gate is architecturally complete: it scores Nitpicker reasoning
+via `brain_health_check` and routes findings according to the returned r-ratio
+using deterministic threshold logic (HEALTHY >= 0.55, CAUTION >= 0.40, STRESSED < 0.40).
+The routing code has full test coverage and operates exactly as specified.
+
+However, the current `brain_health_check` endpoint uses a text-proxy GUE spacing
+calculation rather than real model hidden-state eigenvalues. Validation in the
+Geometric Brain repository shows that text-proxy r-ratios cluster around 0.41-0.43
+for English prose regardless of content, with current benchmark confidence of
+approximately 0.24 at sample_count = 15.
+
+In practice this means that live gate calls against the production endpoint will
+return CAUTION nearly uniformly. The mechanical routing logic -- reject and
+re-investigate on STRESSED -- operates correctly as specified. The underlying
+signal does not yet discriminate between coherent and hallucinated reasoning at
+statistically defensible levels.
+
+The demo's STRESSED reading on iteration 3 is a deterministic scripted value used
+to visualize the architectural re-investigation loop. It is not produced by a live
+`brain_health_check` call; this is by design and is documented explicitly in the
+demo output.
+
+The pathway to a discriminative gate is the manifold-audit endpoint with real model
+hidden-state eigenvalues, which is an active research line in the Geometric Brain
+and Unitarity-lab projects. The Sentinel gate interface is forward-compatible: when
+manifold-audit ships with measured AUROC against a hallucination ground-truth
+(target > 0.7), no Sentinel code changes will be required -- the endpoint URL and
+threshold constants are the only configuration surface.
+
+We disclose this because architectural honesty about what is measured versus what
+is aspirational is itself a core design principle of this submission.
