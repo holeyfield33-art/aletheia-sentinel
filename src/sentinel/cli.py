@@ -721,3 +721,7 @@ def main() -> None:
         sys.exit(_cmd_verify(args))
     else:
         sys.exit(_cmd_demo(args))
+
+
+if __name__ == "__main__":
+    main()
