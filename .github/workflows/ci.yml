@@ -28,5 +28,11 @@ jobs:
         run: mypy
       - name: Test
         env:
-          ALETHEIA_RECEIPT_SECRET: ci-fixture-secret-do-not-use-in-production
+          # This environment variable is required by the receipt chain unit tests.
+          # It is NOT a real secret. Production deployments load the HMAC key from
+          # a runtime-provided ALETHEIA_RECEIPT_SECRET or an external secret manager.
+          # The value below is a deterministic test fixture so CI runs deterministically
+          # and forks can run the test suite without additional setup.
+          # See SECURITY.md for vulnerability reporting.
+          ALETHEIA_RECEIPT_SECRET: TEST_FIXTURE_NOT_A_REAL_HMAC_KEY_DO_NOT_FLAG_AS_SECRET
         run: pytest
