@@ -117,3 +117,50 @@ async def test_nonzero_exit_code(dummy_hive: Path) -> None:
     assert result.status == ToolStatus.ERROR
     assert result.error is not None
     assert "RegRipper failed" in result.error
+
+
+async def test_parses_real_amcache_plugin_output(dummy_hive: Path) -> None:
+    # Realistic rip.pl -p amcache -r Amcache.hve output.
+    # The amcache plugin emits a header block (amcache v.YYYYMMDD), then per-entry
+    # blocks with: Key: ..., LastWrite: ..., file_id: ..., sha1: ...,
+    # file_size: ..., full_path: ..., last_modified: ... (underscore variant).
+    # file_id and file_size are not mapped to AmcacheEntry fields and are silently
+    # ignored by the parser.  full_path triggers entry creation (real format).
+    real_output = (
+        b"amcache v.20200220\n"
+        b"(HKLM\\ROOT\\InventoryApplicationFile)\n"
+        b"\n"
+        b"Key: {7c5a40ef-a0fb-4bfc-874a-c0f2e0b9fa8e}\n"
+        b"LastWrite: Wed Nov 18 10:23:44 2020 (UTC)\n"
+        b"\n"
+        b"file_id: 0000abc123def456\n"
+        b"sha1: aabbccddeeff00112233445566778899aabbccdd\n"
+        b"file_size: 12345\n"
+        b"last_modified: Wed Nov 18 10:00:00 2020 (UTC)\n"
+        b"full_path: c:\\windows\\system32\\calc.exe\n"
+        b"\n"
+        b"Key: {8d9e4a6b-c1d2-e3f4-a5b6-c7d8e9f0a1b2}\n"
+        b"LastWrite: Thu Nov 19 09:10:00 2020 (UTC)\n"
+        b"\n"
+        b"file_id: 0000def456abc789\n"
+        b"sha1: 1122334455667788990011223344556677889900\n"
+        b"file_size: 98765\n"
+        b"last_modified: Thu Nov 19 08:00:00 2020 (UTC)\n"
+        b"full_path: c:\\windows\\system32\\notepad.exe\n"
+    )
+    with patch(
+        "sentinel.tools._subprocess.run_tool",
+        new=AsyncMock(return_value=(0, real_output, b"")),
+    ):
+        result = await regripper_amcache(AmcacheInput(hive_file=dummy_hive))
+
+    assert result.status == ToolStatus.OK
+    assert result.error is None
+    assert result.payload is not None
+    entries = result.payload["entries"]
+    assert len(entries) == 2
+    assert entries[0]["program_path"] == "c:\\windows\\system32\\calc.exe"
+    assert entries[0]["sha1"] == "aabbccddeeff00112233445566778899aabbccdd"
+    assert entries[0]["last_modified"] == "Wed Nov 18 10:00:00 2020 (UTC)"
+    assert entries[1]["program_path"] == "c:\\windows\\system32\\notepad.exe"
+    assert entries[1]["sha1"] == "1122334455667788990011223344556677889900"
