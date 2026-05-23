@@ -123,3 +123,72 @@ async def test_nonzero_exit_code(dummy_image: Path) -> None:
     assert result.status == ToolStatus.ERROR
     assert result.error is not None
     assert "code 1" in result.error
+
+
+async def test_parses_real_tool_output(dummy_image: Path) -> None:
+    # Real vol3 windows.pslist.PsList -r json format: uppercase column names
+    # plus __children and "File output" extras added by the TreeGrid renderer.
+    real_rows = [
+        {
+            "__children": [],
+            "PID": 4,
+            "PPID": 0,
+            "ImageFileName": "System",
+            "Offset(V)": "0xfa8000c95040",
+            "Threads": 147,
+            "Handles": 2343,
+            "SessionId": None,
+            "Wow64": False,
+            "CreateTime": "2023-11-15 08:00:00.000000 UTC+0000",
+            "ExitTime": None,
+            "File output": "-",
+        },
+        {
+            "__children": [],
+            "PID": 388,
+            "PPID": 4,
+            "ImageFileName": "smss.exe",
+            "Offset(V)": "0xfa8001234000",
+            "Threads": 2,
+            "Handles": 35,
+            "SessionId": 0,
+            "Wow64": False,
+            "CreateTime": "2023-11-15 08:00:00.543210 UTC+0000",
+            "ExitTime": None,
+            "File output": "-",
+        },
+        {
+            "__children": [],
+            "PID": 3980,
+            "PPID": 2172,
+            "ImageFileName": "mimikatz.exe",
+            "Offset(V)": "0xfa8003456000",
+            "Threads": 3,
+            "Handles": None,
+            "SessionId": 1,
+            "Wow64": True,
+            "CreateTime": "2023-11-15 08:02:45.000000 UTC+0000",
+            "ExitTime": None,
+            "File output": "-",
+        },
+    ]
+    stdout = json.dumps(real_rows).encode()
+    with patch(
+        "sentinel.tools._subprocess.run_tool",
+        new=AsyncMock(return_value=(0, stdout, b"")),
+    ):
+        result = await volatility_pslist(PslistInput(memory_image=dummy_image))
+
+    assert result.status == ToolStatus.OK
+    assert result.error is None
+    assert result.payload is not None
+    procs = result.payload["processes"]
+    assert len(procs) == 3
+    assert procs[0]["pid"] == 4
+    assert procs[0]["name"] == "System"
+    assert procs[0]["offset"] == "0xfa8000c95040"
+    assert procs[1]["pid"] == 388
+    assert procs[1]["name"] == "smss.exe"
+    assert procs[2]["pid"] == 3980
+    assert procs[2]["wow64"] is True
+    assert procs[2]["handles"] is None

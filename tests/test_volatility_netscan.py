@@ -122,3 +122,54 @@ async def test_nonzero_exit_code(dummy_image: Path) -> None:
     assert result.status == ToolStatus.ERROR
     assert result.error is not None
     assert "code 2" in result.error
+
+
+async def test_parses_real_tool_output(dummy_image: Path) -> None:
+    # Real vol3 windows.netscan.NetScan -r json format: aliased column names
+    # plus __children extra added by the TreeGrid renderer.
+    real_rows = [
+        {
+            "__children": [],
+            "Offset": "0xfa8001a2b3c4",
+            "Proto": "TCPv4",
+            "LocalAddr": "192.168.1.10",
+            "LocalPort": 445,
+            "ForeignAddr": "10.0.0.5",
+            "ForeignPort": 49200,
+            "State": "ESTABLISHED",
+            "PID": 4,
+            "Owner": "System",
+            "Created": "2023-01-01 00:01:00.000000",
+        },
+        {
+            "__children": [],
+            "Offset": "0xfa8001a2b3d0",
+            "Proto": "UDPv4",
+            "LocalAddr": "0.0.0.0",
+            "LocalPort": 5355,
+            "ForeignAddr": None,
+            "ForeignPort": None,
+            "State": None,
+            "PID": 1088,
+            "Owner": "svchost.exe",
+            "Created": None,
+        },
+    ]
+    stdout = json.dumps(real_rows).encode()
+    with patch(
+        "sentinel.tools._subprocess.run_tool",
+        new=AsyncMock(return_value=(0, stdout, b"")),
+    ):
+        result = await volatility_netscan(NetscanInput(memory_image=dummy_image))
+
+    assert result.status == ToolStatus.OK
+    assert result.error is None
+    assert result.payload is not None
+    conns = result.payload["connections"]
+    assert len(conns) == 2
+    assert conns[0]["protocol"] == "TCPv4"
+    assert conns[0]["local_address"] == "192.168.1.10"
+    assert conns[0]["local_port"] == 445
+    assert conns[0]["state"] == "ESTABLISHED"
+    assert conns[1]["protocol"] == "UDPv4"
+    assert conns[1]["foreign_address"] is None

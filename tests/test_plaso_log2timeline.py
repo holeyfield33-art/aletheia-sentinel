@@ -177,3 +177,58 @@ async def test_log2timeline_nonzero_exit(image_file: Path, output_dir: Path) -> 
     assert result.status == ToolStatus.ERROR
     assert result.error is not None
     assert "log2timeline" in result.error
+
+
+async def test_parses_real_tool_output(image_file: Path, output_dir: Path) -> None:
+    # Real psort -o json field names; also includes parser-specific extras
+    # (display_name, parser, tag) that the wrapper must silently strip.
+    real_events = [
+        {
+            "datetime": "2023-01-01T00:00:00Z",
+            "timestamp_desc": "File Modified",
+            "source_short": "FILE",
+            "source_long": "OS file entry",
+            "message": "OS file entry: C:/Windows/System32/calc.exe",
+            "message_short": "C:/Windows/System32/calc.exe",
+            "username": None,
+            "hostname": "DESKTOP-1",
+            # parser-specific extras -- should be stripped, not cause forbid error
+            "display_name": "OS:/Windows/System32/calc.exe",
+            "parser": "filestat",
+            "tag": [],
+        },
+        {
+            "datetime": "2023-01-01T00:01:00Z",
+            "timestamp_desc": "Registry Key Written",
+            "source_short": "REG",
+            "source_long": "Registry Key",
+            "message": "Registry key: HKLM\\Software\\Microsoft",
+            # no message_short -- wrapper must derive from message[:100]
+            "username": "Administrator",
+            "hostname": "DESKTOP-1",
+            "display_name": "NTUSER.DAT",
+            "parser": "winreg",
+        },
+    ]
+    side_effect = _make_psort_writer(output_dir, real_events)
+    with patch(
+        "sentinel.tools._subprocess.run_tool",
+        new=AsyncMock(side_effect=side_effect),
+    ):
+        result = await plaso_log2timeline(
+            Log2TimelineInput(image_path=image_file, output_dir=output_dir)
+        )
+
+    assert result.status == ToolStatus.OK
+    assert result.error is None
+    assert result.payload is not None
+    assert result.payload["event_count"] == 2
+    events = result.payload["events_sample"]
+    assert len(events) == 2
+    assert events[0]["source"] == "FILE"
+    assert events[0]["event_type"] == "File Modified"
+    assert events[0]["timestamp"] == "2023-01-01T00:00:00Z"
+    assert events[0]["short_description"] == "C:/Windows/System32/calc.exe"
+    assert events[1]["source"] == "REG"
+    # short_description derived from message when message_short absent
+    assert events[1]["short_description"] == "Registry key: HKLM\\Software\\Microsoft"[:100]

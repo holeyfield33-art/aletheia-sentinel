@@ -170,3 +170,78 @@ async def test_custom_event_id_filter(dummy_evtx: Path) -> None:
     events = result.payload["events"]
     assert len(events) == 1
     assert events[0]["event_id"] == 4624
+
+
+async def test_parses_real_tool_output(dummy_evtx: Path) -> None:
+    # Real EvtxECmd --json field names: EventId, RecordNumber, Provider,
+    # PayloadData1..6, MapDescription, UserName, ExecutableInfo.
+    real_events = [
+        {
+            "EventId": 4624,
+            "Level": "Information",
+            "Channel": "Security",
+            "Computer": "DESKTOP-VICTIM",
+            "TimeCreated": "2023-06-15T08:00:00.000Z",
+            "RecordNumber": 12345,
+            "MapDescription": "Logon",
+            "UserName": "VICTIM\\Administrator",
+            "PayloadData1": "An account was successfully logged on.",
+            "PayloadData2": "Subject: S-1-5-18",
+            "PayloadData3": None,
+            "PayloadData4": None,
+            "PayloadData5": None,
+            "PayloadData6": None,
+            "ExecutableInfo": None,
+            "Provider": "Microsoft-Windows-Security-Auditing",
+        },
+        {
+            "EventId": 4688,
+            "Level": "Information",
+            "Channel": "Security",
+            "Computer": "DESKTOP-VICTIM",
+            "TimeCreated": "2023-06-15T08:01:00.000Z",
+            "RecordNumber": 12346,
+            "MapDescription": "A new process has been created.",
+            "UserName": "VICTIM\\Administrator",
+            "PayloadData1": "Process: cmd.exe",
+            "PayloadData2": "Parent: explorer.exe",
+            "PayloadData3": None,
+            "PayloadData4": None,
+            "PayloadData5": None,
+            "PayloadData6": None,
+            "ExecutableInfo": "C:\\Windows\\System32\\cmd.exe",
+            "Provider": "Microsoft-Windows-Security-Auditing",
+        },
+        # Event with ID not in default filter -- should be skipped
+        {
+            "EventId": 9999,
+            "Level": "Information",
+            "Channel": "Security",
+            "Computer": "DESKTOP-VICTIM",
+            "TimeCreated": "2023-06-15T08:02:00.000Z",
+            "RecordNumber": 12347,
+            "MapDescription": "Unknown",
+            "UserName": None,
+            "Provider": "Microsoft-Windows-Security-Auditing",
+        },
+    ]
+    side_effect = _make_evtx_writer(real_events)
+    with patch(
+        "sentinel.tools._subprocess.run_tool",
+        new=AsyncMock(side_effect=side_effect),
+    ):
+        result = await evtxecmd_security(EvtxSecurityInput(evtx_path=dummy_evtx))
+
+    assert result.status == ToolStatus.OK
+    assert result.error is None
+    assert result.payload is not None
+    events = result.payload["events"]
+    # EventId 9999 is filtered out; EventId 4624 and 4688 remain
+    assert len(events) == 2
+    assert events[0]["event_id"] == 4624
+    assert events[0]["payload_summary"] == (
+        "An account was successfully logged on. | Subject: S-1-5-18"
+    )
+    assert events[1]["event_id"] == 4688
+    assert events[1]["record_id"] == 12346
+    assert events[1]["provider_name"] == "Microsoft-Windows-Security-Auditing"
