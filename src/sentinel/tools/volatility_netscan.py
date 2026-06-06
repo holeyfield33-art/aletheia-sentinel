@@ -27,6 +27,14 @@ class Connection(BaseModel):
     owner: str | None = Field(default=None, alias="Owner")
     created: str | None = Field(default=None, alias="Created")
 
+    @field_validator("offset", mode="before")
+    @classmethod
+    def _normalize_offset(cls, v: object) -> str:
+        # Volatility 3 -r json emits Offset as an int; older/other outputs as a hex string.
+        if isinstance(v, int):
+            return hex(v)
+        return str(v)
+
 
 class NetscanInput(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
