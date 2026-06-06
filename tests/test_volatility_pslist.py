@@ -356,3 +356,38 @@ async def test_parses_real_tool_output(dummy_image: Path) -> None:
     assert procs[2]["pid"] == 3980
     assert procs[2]["wow64"] is True
     assert procs[2]["handles"] is None
+
+
+async def test_psscan_offset_p_normalized(dummy_image: Path) -> None:
+    # Some Volatility 3 builds emit Offset(P) (physical) without Offset(V).
+    # The parser must normalise Offset(P) -> Offset(V) so the row validates.
+    pscan_physical_only = [
+        {
+            "__children": [],
+            "PID": 12528,
+            "PPID": 740,
+            "ImageFileName": "subject_srv.ex",
+            "Offset(P)": "0x1a2b3c4d5000",
+            "Threads": 5,
+            "Handles": 120,
+            "SessionId": 1,
+            "Wow64": True,
+            "CreateTime": "2018-09-12 09:15:33.000000 UTC+0000",
+            "ExitTime": None,
+            "File output": "-",
+        }
+    ]
+    pslist_empty = json.dumps([]).encode()
+    psscan_out = json.dumps(pscan_physical_only).encode()
+    mock = AsyncMock(
+        side_effect=[(0, pslist_empty, b""), (0, psscan_out, b"")]
+    )
+    with patch("sentinel.tools._subprocess.run_tool", new=mock):
+        result = await volatility_pslist(PslistInput(memory_image=dummy_image))
+
+    assert result.status == ToolStatus.OK
+    assert result.payload is not None
+    procs = result.payload["processes"]
+    assert len(procs) == 1
+    assert procs[0]["pid"] == 12528
+    assert procs[0]["offset"] == "0x1a2b3c4d5000"

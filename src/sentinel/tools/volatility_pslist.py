@@ -71,6 +71,11 @@ def _parse_vol_output(
     processes: list[Process] = []
     skip_notes: list[str] = []
     for item in data:
+        # psscan may emit Offset(P) (physical) without Offset(V) (virtual).
+        # Normalise so the Process model always sees Offset(V).
+        if "Offset(V)" not in item and "Offset(P)" in item:
+            item = dict(item)
+            item["Offset(V)"] = item["Offset(P)"]
         clean = {k: v for k, v in item.items() if k not in _VOL3_PSLIST_STRIP}
         try:
             processes.append(Process.model_validate(clean))
