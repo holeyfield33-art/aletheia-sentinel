@@ -358,6 +358,99 @@ async def test_parses_real_tool_output(dummy_image: Path) -> None:
     assert procs[2]["handles"] is None
 
 
+async def test_offset_emitted_as_int(dummy_image: Path) -> None:
+    int_offset = 148445556711488
+    row = {
+        "__children": [],
+        "PID": 12528,
+        "PPID": 740,
+        "ImageFileName": "subject_srv.ex",
+        "Offset(V)": int_offset,
+        "Threads": 13,
+        "Handles": None,
+        "SessionId": 1,
+        "Wow64": True,
+        "CreateTime": "2018-09-12 09:15:33.000000 UTC+0000",
+        "ExitTime": None,
+        "File output": "-",
+    }
+    stdout = json.dumps([row]).encode()
+    with patch(
+        "sentinel.tools._subprocess.run_tool",
+        new=AsyncMock(return_value=(0, stdout, b"")),
+    ):
+        result = await volatility_pslist(PslistInput(memory_image=dummy_image))
+
+    assert result.status == ToolStatus.OK
+    assert result.payload is not None
+    procs = result.payload["processes"]
+    assert len(procs) == 1
+    assert procs[0]["offset"] == hex(int_offset)
+
+
+async def test_offset_emitted_as_string(dummy_image: Path) -> None:
+    str_offset = "0x8702b02795c0"
+    row = {
+        "__children": [],
+        "PID": 4,
+        "PPID": 0,
+        "ImageFileName": "System",
+        "Offset(V)": str_offset,
+        "Threads": 147,
+        "Handles": None,
+        "SessionId": None,
+        "Wow64": False,
+        "CreateTime": None,
+        "ExitTime": None,
+        "File output": "-",
+    }
+    stdout = json.dumps([row]).encode()
+    with patch(
+        "sentinel.tools._subprocess.run_tool",
+        new=AsyncMock(return_value=(0, stdout, b"")),
+    ):
+        result = await volatility_pslist(PslistInput(memory_image=dummy_image))
+
+    assert result.status == ToolStatus.OK
+    assert result.payload is not None
+    assert result.payload["processes"][0]["offset"] == str_offset
+
+
+async def test_real_world_psscan_row(dummy_image: Path) -> None:
+    int_offset = 148445556711488
+    row = {
+        "__children": [],
+        "PID": 12528,
+        "PPID": 740,
+        "ImageFileName": "subject_srv.ex",
+        "Offset(V)": int_offset,
+        "Threads": 13,
+        "Handles": None,
+        "SessionId": 1,
+        "Wow64": True,
+        "CreateTime": "2018-09-12 09:15:33.000000 UTC+0000",
+        "ExitTime": None,
+        "File output": "-",
+    }
+    pslist_empty = json.dumps([]).encode()
+    psscan_out = json.dumps([row]).encode()
+    mock = AsyncMock(side_effect=[(0, pslist_empty, b""), (0, psscan_out, b"")])
+    with patch("sentinel.tools._subprocess.run_tool", new=mock):
+        result = await volatility_pslist(PslistInput(memory_image=dummy_image))
+
+    assert result.status == ToolStatus.OK
+    assert result.payload is not None
+    procs = result.payload["processes"]
+    assert len(procs) == 1
+    p = procs[0]
+    assert p["pid"] == 12528
+    assert p["ppid"] == 740
+    assert p["name"] == "subject_srv.ex"
+    assert p["offset"] == hex(int_offset)
+    assert p["wow64"] is True
+    assert p["threads"] == 13
+
+
 async def test_psscan_offset_p_normalized(dummy_image: Path) -> None:
     # Some Volatility 3 builds emit Offset(P) (physical) without Offset(V).
     # The parser must normalise Offset(P) -> Offset(V) so the row validates.

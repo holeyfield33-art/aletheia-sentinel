@@ -34,6 +34,14 @@ class Process(BaseModel):
     create_time: str | None = Field(default=None, alias="CreateTime")
     exit_time: str | None = Field(default=None, alias="ExitTime")
 
+    @field_validator("offset", mode="before")
+    @classmethod
+    def _normalize_offset(cls, v: object) -> str:
+        # Volatility 3 -r json emits Offset(V) as an int; older/other outputs as a hex string.
+        if isinstance(v, int):
+            return hex(v)
+        return str(v)
+
 
 class PslistInput(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
