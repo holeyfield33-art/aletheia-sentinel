@@ -25,7 +25,7 @@ jobs:
       - name: Lint
         run: ruff check src tests
       - name: Type check
-        run: mypy
+        run: python -m mypy
       - name: Test
         env:
           # This environment variable is required by the receipt chain unit tests.
