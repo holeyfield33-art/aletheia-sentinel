@@ -8,7 +8,8 @@ returns canned responses.
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from sentinel.agents.llm import ClaudeJudge, ClaudeNitpicker, ClaudeScout
 from sentinel.agents.orchestrator import (
@@ -357,3 +358,36 @@ async def test_claude_scout_connection_error_returns_fallback() -> None:
     assert decision.done is False
     assert decision.tool_name is None
     assert "connection error" in decision.reason
+
+
+# ---------------------------------------------------------------------------
+# Test 11: executor overrides LLM-invented memory_image with real evidence_image
+# ---------------------------------------------------------------------------
+
+
+async def test_wiring_evidence_image_overrides_bogus_path(tmp_path: Path) -> None:
+    """When build_executor receives evidence_image, it must substitute the real
+    path for any Scout-invented memory_image arg before dispatching the tool.
+    The bogus path must never reach PslistInput validation."""
+    from sentinel.tools.volatility_pslist import PslistInput
+
+    real_image = tmp_path / "memory.img"
+    real_image.write_bytes(b"")  # must exist for PslistInput.memory_image validator
+
+    executor = build_executor(MagicMock(), evidence_image=real_image)
+
+    captured: list[PslistInput] = []
+
+    async def _fake_pslist(payload: PslistInput) -> ToolResult:
+        captured.append(payload)
+        return ToolResult(tool_name="volatility.pslist", status=ToolStatus.OK)
+
+    with patch("sentinel.agents.wiring.volatility_pslist", new=_fake_pslist):
+        result = await executor(
+            "volatility.pslist",
+            {"memory_image": "/cases/srl2018-wkstn01/memory.raw"},
+        )
+
+    assert result.status is ToolStatus.OK
+    assert len(captured) == 1
+    assert captured[0].memory_image == real_image
