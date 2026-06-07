@@ -11,6 +11,7 @@ mapping is statically auditable.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sentinel.agents.orchestrator import ToolExecutor
@@ -54,11 +55,22 @@ _DISPATCH: dict[str, Callable[[dict[str, object]], Awaitable[ToolResult]]] = {
 }
 
 
-def build_executor(server: FastMCP) -> ToolExecutor:  # noqa: ARG001
+def build_executor(
+    server: FastMCP,  # noqa: ARG001
+    *,
+    evidence_image: Path | None = None,
+    evidence_disk: Path | None = None,
+) -> ToolExecutor:
     """Return a ToolExecutor that dispatches directly to wrapper functions.
 
     The ``server`` parameter is accepted for API consistency with callers
     that pass the FastMCP instance; it is not used in the direct-dispatch path.
+
+    ``evidence_image`` and ``evidence_disk`` pin the real evidence paths from
+    the CLI flags. Scout selects which tool to run and any non-path parameters;
+    it must not determine the evidence file path. Overriding here means the
+    agent cannot redirect a tool at an invented or arbitrary file -- a
+    server-side guardrail consistent with the no-shell-execution invariant.
     """
 
     async def _execute(tool_name: str, args: dict[str, object]) -> ToolResult:
@@ -70,6 +82,12 @@ def build_executor(server: FastMCP) -> ToolExecutor:  # noqa: ARG001
                 error=f"Unknown tool: {tool_name!r}. "
                 f"Available: {sorted(_DISPATCH)}",
             )
+        # Pin evidence paths: override whatever path Scout invented with the
+        # real path captured from --image / --disk on the CLI.
+        if tool_name in ("volatility.pslist", "volatility.netscan") and evidence_image:
+            args = {**args, "memory_image": str(evidence_image)}
+        if tool_name == "plaso.log2timeline" and evidence_disk:
+            args = {**args, "image_path": str(evidence_disk)}
         return await fn(args)
 
     return _execute

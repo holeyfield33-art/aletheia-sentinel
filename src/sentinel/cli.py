@@ -400,7 +400,7 @@ async def _run_investigation(
     max_iterations: int,
 ) -> int:
     if image_path is not None:
-        log.info("Evidence image: %s (captured; tool wiring uses this via Scout args)", image_path)
+        log.info("Evidence image: %s (pinned; executor overrides Scout-invented paths)", image_path)
 
     secret = secret_from_env()
     chain = ReceiptChain(secret=secret, session_id=case_id)
@@ -413,7 +413,7 @@ async def _run_investigation(
 
     from sentinel.server import server  # local import avoids circular at module level
 
-    executor = build_executor(server)
+    executor = build_executor(server, evidence_image=image_path)
 
     config = OrchestratorConfig(max_iterations=max_iterations)
     orch = Orchestrator(
