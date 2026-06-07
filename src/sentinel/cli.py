@@ -35,70 +35,104 @@ from sentinel.tools.base import ToolResult, ToolStatus
 
 log = logging.getLogger(__name__)
 
+_TOOL_DEF_PSLIST: dict[str, Any] = {
+    "name": "volatility.pslist",
+    "description": "List running processes from a memory image (Volatility 3).",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "memory_image": {"type": "string", "description": "Path to memory image file."},
+            "profile_hint": {"type": "string", "description": "Optional OS profile hint."},
+        },
+        "required": ["memory_image"],
+    },
+}
+
+_TOOL_DEF_NETSCAN: dict[str, Any] = {
+    "name": "volatility.netscan",
+    "description": "Scan network connections from a memory image (Volatility 3).",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "memory_image": {"type": "string", "description": "Path to memory image file."},
+        },
+        "required": ["memory_image"],
+    },
+}
+
+_TOOL_DEF_AMCACHE: dict[str, Any] = {
+    "name": "regripper.amcache",
+    "description": "Parse Amcache.hve with RegRipper to enumerate executed programs.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "hive_file": {"type": "string", "description": "Path to Amcache.hve."},
+        },
+        "required": ["hive_file"],
+    },
+}
+
+_TOOL_DEF_LOG2TIMELINE: dict[str, Any] = {
+    "name": "plaso.log2timeline",
+    "description": "Build a super-timeline from a disk image (slow; use last).",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "image_path": {"type": "string", "description": "Path to disk image."},
+            "output_dir": {"type": "string", "description": "Directory for output files."},
+        },
+        "required": ["image_path", "output_dir"],
+    },
+}
+
+_TOOL_DEF_PARSE_SECURITY: dict[str, Any] = {
+    "name": "evtxecmd.parse_security",
+    "description": "Parse Security.evtx for authentication and privilege events.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "evtx_path": {"type": "string", "description": "Path to Security.evtx file."},
+            "include_event_ids": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "Event IDs to include (defaults to auth-relevant set).",
+            },
+        },
+        "required": ["evtx_path"],
+    },
+}
+
 _TOOL_CATALOG: list[dict[str, Any]] = [
-    {
-        "name": "volatility.pslist",
-        "description": "List running processes from a memory image (Volatility 3).",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "memory_image": {"type": "string", "description": "Path to memory image file."},
-                "profile_hint": {"type": "string", "description": "Optional OS profile hint."},
-            },
-            "required": ["memory_image"],
-        },
-    },
-    {
-        "name": "volatility.netscan",
-        "description": "Scan network connections from a memory image (Volatility 3).",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "memory_image": {"type": "string", "description": "Path to memory image file."},
-            },
-            "required": ["memory_image"],
-        },
-    },
-    {
-        "name": "regripper.amcache",
-        "description": "Parse Amcache.hve with RegRipper to enumerate executed programs.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "hive_file": {"type": "string", "description": "Path to Amcache.hve."},
-            },
-            "required": ["hive_file"],
-        },
-    },
-    {
-        "name": "plaso.log2timeline",
-        "description": "Build a super-timeline from a disk image (slow; use last).",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "image_path": {"type": "string", "description": "Path to disk image."},
-                "output_dir": {"type": "string", "description": "Directory for output files."},
-            },
-            "required": ["image_path", "output_dir"],
-        },
-    },
-    {
-        "name": "evtxecmd.parse_security",
-        "description": "Parse Security.evtx for authentication and privilege events.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "evtx_path": {"type": "string", "description": "Path to Security.evtx file."},
-                "include_event_ids": {
-                    "type": "array",
-                    "items": {"type": "integer"},
-                    "description": "Event IDs to include (defaults to auth-relevant set).",
-                },
-            },
-            "required": ["evtx_path"],
-        },
-    },
+    _TOOL_DEF_PSLIST,
+    _TOOL_DEF_NETSCAN,
+    _TOOL_DEF_AMCACHE,
+    _TOOL_DEF_LOG2TIMELINE,
+    _TOOL_DEF_PARSE_SECURITY,
 ]
+
+
+def _build_tool_catalog(
+    evidence_image: Path | None,
+    evidence_disk: Path | None,
+    evidence_hive: Path | None,
+    evidence_evtx: Path | None,
+) -> list[dict[str, Any]]:
+    """Return only the tools whose required evidence was actually provided.
+
+    A senior analyst doesn't run registry tools with no registry, and Scout
+    shouldn't be offered tools it can't meaningfully invoke.
+    """
+    catalog: list[dict[str, Any]] = []
+    if evidence_image is not None:
+        catalog.append(_TOOL_DEF_PSLIST)
+        catalog.append(_TOOL_DEF_NETSCAN)
+    if evidence_disk is not None:
+        catalog.append(_TOOL_DEF_LOG2TIMELINE)
+    if evidence_hive is not None:
+        catalog.append(_TOOL_DEF_AMCACHE)
+    if evidence_evtx is not None:
+        catalog.append(_TOOL_DEF_PARSE_SECURITY)
+    return catalog
 
 
 # ---------------------------------------------------------------------------
@@ -397,23 +431,42 @@ def _run_demo(seed: int) -> int:
 async def _run_investigation(
     case_id: str,
     image_path: Path | None,
+    disk_path: Path | None,
+    hive_path: Path | None,
+    evtx_path: Path | None,
     max_iterations: int,
 ) -> int:
     if image_path is not None:
-        log.info("Evidence image: %s (pinned; executor overrides Scout-invented paths)", image_path)
+        log.info("Evidence image: %s (pinned)", image_path)
+    if disk_path is not None:
+        log.info("Evidence disk: %s (pinned)", disk_path)
+    if hive_path is not None:
+        log.info("Evidence hive: %s (pinned)", hive_path)
+    if evtx_path is not None:
+        log.info("Evidence evtx: %s (pinned)", evtx_path)
+
+    tool_catalog = _build_tool_catalog(image_path, disk_path, hive_path, evtx_path)
+    if not tool_catalog:
+        log.warning("No evidence paths provided; Scout will have no tools available.")
 
     secret = secret_from_env()
     chain = ReceiptChain(secret=secret, session_id=case_id)
 
     client = make_client()
-    scout = ClaudeScout(client=client, tool_catalog=_TOOL_CATALOG)
+    scout = ClaudeScout(client=client, tool_catalog=tool_catalog)
     nitpicker = ClaudeNitpicker(client=client)
     judge = ClaudeJudge(client=client)
     gate = RemoteSpectralGate()
 
     from sentinel.server import server  # local import avoids circular at module level
 
-    executor = build_executor(server, evidence_image=image_path)
+    executor = build_executor(
+        server,
+        evidence_image=image_path,
+        evidence_disk=disk_path,
+        evidence_hive=hive_path,
+        evidence_evtx=evtx_path,
+    )
 
     config = OrchestratorConfig(max_iterations=max_iterations)
     orch = Orchestrator(
@@ -628,11 +681,17 @@ def _cmd_server(_args: argparse.Namespace) -> int:
 
 def _cmd_run(args: argparse.Namespace) -> int:
     image_path = Path(args.image) if args.image else None
+    disk_path = Path(args.disk) if args.disk else None
+    hive_path = Path(args.hive) if args.hive else None
+    evtx_path = Path(args.evtx) if args.evtx else None
     try:
         return asyncio.run(
             _run_investigation(
                 case_id=args.case_id,
                 image_path=image_path,
+                disk_path=disk_path,
+                hive_path=hive_path,
+                evtx_path=evtx_path,
                 max_iterations=args.max_iterations,
             )
         )
@@ -672,7 +731,22 @@ def main() -> None:
 
     run_p = sub.add_parser("run", help="Run a full investigation session.")
     run_p.add_argument("case_id", help="Unique identifier for this investigation.")
-    run_p.add_argument("--image", metavar="PATH", help="Path to evidence image (disk or memory).")
+    run_p.add_argument(
+        "--image", metavar="PATH",
+        help="Path to memory image (enables volatility.pslist / netscan).",
+    )
+    run_p.add_argument(
+        "--disk", metavar="PATH",
+        help="Path to disk image (enables plaso.log2timeline).",
+    )
+    run_p.add_argument(
+        "--hive", metavar="PATH",
+        help="Path to registry hive file (enables regripper.amcache).",
+    )
+    run_p.add_argument(
+        "--evtx", metavar="PATH",
+        help="Path to Security.evtx file (enables evtxecmd.parse_security).",
+    )
     run_p.add_argument(
         "--max-iterations",
         type=int,

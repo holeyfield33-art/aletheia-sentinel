@@ -60,17 +60,21 @@ def build_executor(
     *,
     evidence_image: Path | None = None,
     evidence_disk: Path | None = None,
+    evidence_hive: Path | None = None,
+    evidence_evtx: Path | None = None,
 ) -> ToolExecutor:
     """Return a ToolExecutor that dispatches directly to wrapper functions.
 
     The ``server`` parameter is accepted for API consistency with callers
     that pass the FastMCP instance; it is not used in the direct-dispatch path.
 
-    ``evidence_image`` and ``evidence_disk`` pin the real evidence paths from
-    the CLI flags. Scout selects which tool to run and any non-path parameters;
-    it must not determine the evidence file path. Overriding here means the
-    agent cannot redirect a tool at an invented or arbitrary file -- a
-    server-side guardrail consistent with the no-shell-execution invariant.
+    Evidence path parameters pin the real paths from CLI flags so Scout cannot
+    redirect tools at invented or arbitrary files -- a server-side guardrail
+    consistent with the no-shell-execution invariant.
+
+    If a tool is called but its required evidence path was not provided, the
+    executor returns ToolStatus.ERROR immediately rather than letting an
+    invented path reach the Pydantic validator.
     """
 
     async def _execute(tool_name: str, args: dict[str, object]) -> ToolResult:
@@ -82,12 +86,47 @@ def build_executor(
                 error=f"Unknown tool: {tool_name!r}. "
                 f"Available: {sorted(_DISPATCH)}",
             )
+
+        # Fast-fail if the required evidence was not supplied for this tool.
+        if tool_name in ("volatility.pslist", "volatility.netscan") and evidence_image is None:
+            return ToolResult(
+                tool_name=tool_name,
+                status=ToolStatus.ERROR,
+                error=f"{tool_name} requires a memory image (--image) but none was provided.",
+            )
+        if tool_name == "plaso.log2timeline" and evidence_disk is None:
+            return ToolResult(
+                tool_name=tool_name,
+                status=ToolStatus.ERROR,
+                error="plaso.log2timeline requires a disk image (--disk) but none was provided.",
+            )
+        if tool_name == "regripper.amcache" and evidence_hive is None:
+            return ToolResult(
+                tool_name=tool_name,
+                status=ToolStatus.ERROR,
+                error="regripper.amcache requires a registry hive (--hive) but none was provided.",
+            )
+        if tool_name == "evtxecmd.parse_security" and evidence_evtx is None:
+            return ToolResult(
+                tool_name=tool_name,
+                status=ToolStatus.ERROR,
+                error=(
+                    "evtxecmd.parse_security requires an evtx directory"
+                    " (--evtx) but none was provided."
+                ),
+            )
+
         # Pin evidence paths: override whatever path Scout invented with the
-        # real path captured from --image / --disk on the CLI.
+        # real path captured from the CLI flags.
         if tool_name in ("volatility.pslist", "volatility.netscan") and evidence_image:
             args = {**args, "memory_image": str(evidence_image)}
         if tool_name == "plaso.log2timeline" and evidence_disk:
             args = {**args, "image_path": str(evidence_disk)}
+        if tool_name == "regripper.amcache" and evidence_hive:
+            args = {**args, "hive_file": str(evidence_hive)}
+        if tool_name == "evtxecmd.parse_security" and evidence_evtx:
+            args = {**args, "evtx_path": str(evidence_evtx)}
+
         return await fn(args)
 
     return _execute
