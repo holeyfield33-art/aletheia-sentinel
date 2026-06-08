@@ -112,6 +112,31 @@ The ground-truth evidence files are not committed to git (enforced by .gitignore
 
 ---
 
+## Self-correction: subject_srv.exe false positive
+
+Flagged as a suspected backdoor on host wkstn-01 (name + services.exe parent + TCP 3262
+listener + external session). On rd01, where process internals were recoverable, command-line
+analysis identified it as F-Response forensic tooling. Finding corrected to informational.
+Demonstrates evidence-bounded classification and the value of multi-host correlation:
+memory-only captures where internals are paged out (wkstn-01) cannot classify; a fuller
+capture (rd01) resolves it.
+
+**Corrected classification:**
+`subject_srv.exe` (PID 12528 on wkstn-01; PID 1096 on rd01) is F-Response, a legitimate
+remote-forensics tool deployed by the IR team. Command-line analysis on rd01 recovered:
+`-v "F-Response Subject"`, examiner host base-hunt.shieldbase.lan. Initially flagged as a
+suspected backdoor on name/service-parent/listener; corrected to INFORMATIONAL on cmdline
+evidence.
+
+**Real malicious findings preserved (not softened):**
+- `p.exe` at `c:\windows\temp\perfmon\p.exe` -- implant/dispatcher spawning rundll32 children
+- WMI-spawned PowerShell chain: WmiPrvSE -> powershell -> 32-bit powershell -> cmd -> p.exe
+- Shared C2 `172.16.4.10:8080` across both hosts; lateral SMB/RDP from rd01
+
+Both hosts remain compromised -- per p.exe and the C2, not subject_srv.
+
+---
+
 ## Known Limitations
 
 ### Spectral Gate Calibration
