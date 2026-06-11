@@ -1,95 +1,104 @@
+<div align="center">
+
 # Aletheia Sentinel
 
-**Autonomous incident response on the SANS SIFT Workstation,
-with spectral self-correction to catch agent hallucinations before they reach the case file.**
+**Autonomous incident response on the SANS SIFT Workstation, with
+evidence-grounded self-correction -- every finding traces to a tool execution.**
 
 [![FIND EVIL! Hackathon](https://img.shields.io/badge/Hackathon-FIND%20EVIL!-red)](https://findevil.devpost.com/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen)](https://github.com/holeyfield33-art/aletheia-sentinel/actions)
 
----
+*SANS "Find Evil!" Hackathon -- Architectural Approach #2: Custom MCP Server*
 
-## The Problem
-
-An AI-powered adversary can go from initial access to full domain control in under eight minutes.
-Human incident responders are still pulling up their toolkit.
-The SANS SIFT Workstation has over 200 forensic tools, but a skilled analyst can only run a few
-before an attacker pivots, exfiltrates, or destroys evidence.
-Autonomous triage needs to be fast, auditable, and hallucination-resistant -- three properties
-that are structurally in tension unless the system is designed from the ground up around them.
+</div>
 
 ---
 
-## The Approach
+## What it does
 
-Three structural differentiators, not just better prompts:
+Sentinel is a custom MCP server that gives an autonomous agent a typed forensic
+tool surface -- `volatility_pslist`, `volatility_netscan`, `regripper_amcache`,
+`plaso_log2timeline`, `evtxecmd_security` -- instead of raw shell. A three-agent
+loop (Scout plans, Nitpicker reviews, Judge synthesizes) triages a memory or
+disk image and produces an incident report where every claim is backed by a
+cryptographically-receipted tool execution.
 
-- **Pattern 2: Typed MCP tool surface, not a shell.**
-  The agent calls `volatility_pslist(memory_image=...)`, not `bash("vol.py ...")`.
-  Destructive commands are not in the tool surface; the agent physically cannot run them.
-  Every tool argument passes through Pydantic validation before any subprocess touches disk.
+Validated on real SANS SRL-2018 evidence across three hosts (wkstn-01, rd01,
+wkstn-05) linked by a shared C2 (`172.16.4.10:8080`) and a proven directional
+lateral link (rd01 -> wkstn-05 via inbound SMB) -- a documented multi-host,
+multi-technique campaign. The pipeline surfaced the real implant (`p.exe` in
+`c:\windows\temp\perfmon`), the WMI->PowerShell->rundll32 beacon chains, and
+caught its own false positive: a binary first flagged as a backdoor was
+correctly identified as F-Response forensic tooling via command-line evidence
+-- a trap that recurred on all three hosts and was resolved by evidence each
+time. All three receipt chains verify. Findings were independently verified
+against raw Volatility output. See the
+[accuracy report](docs/accuracy-report.md).
 
-- **Pattern 3: Multi-agent pipeline with HMAC hash-linked audit receipts.**
-  Scout plans tool calls, Nitpicker reviews each result for consistency, Judge synthesizes
-  the final report. Every tool execution writes a receipt that points at the previous
-  receipt's SHA-256 digest. Tampering breaks the chain. Any finding can be traced back
-  to the exact subprocess call that produced it.
+## Why it's safe by construction
 
-- **Spectral self-correction (the differentiator).**
-  Nitpicker reasoning text is scored by the
-  [Geometric Brain MCP server](https://geometric-brain-mcp.onrender.com),
-  which measures GUE eigenvalue spacing as a proxy for reasoning coherence.
-  When the agent's reasoning drifts from a healthy manifold (r < 0.40),
-  the finding is rejected and re-investigated. This is spectral self-correction
-  infrastructure (calibration against hallucination ground truth is parallel
-  research -- see accuracy report).
+- **Architectural guardrail, not a prompt.** Destructive commands aren't in the
+  typed tool surface, so the agent physically cannot run them. Evidence paths
+  are pinned server-side -- the agent cannot redirect a tool at an arbitrary
+  file, and tools are gated by which evidence was actually provided.
+- **Evidence-grounded self-correction.** The Nitpicker agent reviews every
+  finding against the actual tool output and rejects unsupported claims before
+  they reach the report. This is the reliable self-correction path.
+- **Tamper-evident audit trail.** Every tool execution writes an HMAC-signed,
+  hash-linked receipt (SHA-256 of input and output). Altering any receipt
+  breaks verification -- findings trace to executions.
+- **Spoliation-safe.** Read-only pipeline; the source image hash is unchanged
+  after analysis, matching the original acquisition log.
 
----
+*Experimental signal (advisory):* an optional spectral confidence score (via
+Geometric Brain MCP) annotates findings. A calibration study across four models
+found it weak and non-decisive (AUROC ~0.5-0.7), so it informs confidence but
+is not relied on as a hallucination detector -- the decisive rejection path is
+the Nitpicker's evidence-grounded review, with a deterministic
+STRESSED->re-investigate guard retained in the orchestrator as defense-in-depth.
+We report this honestly rather than claim a detector the data does not support.
+Details in the [accuracy report](docs/accuracy-report.md).
 
-## Try It Out
+## Quickstart (60 seconds, no API key)
 
 ```bash
-# Clone and install
-git clone https://github.com/holeyfield33-art/aletheia-sentinel.git
-cd aletheia-sentinel
 pip install -e '.[dev]'
-
-# Set the HMAC receipt secret (required for run/verify; not needed for demo)
-export ALETHEIA_RECEIPT_SECRET="$(python -c 'import secrets; print(secrets.token_hex(32))')"
-
-# Run the scripted demo (no API key, no SIFT tools required)
-sentinel demo
-
-# Verify the receipt chain written by the demo
-# (the demo prints the exact export command and chain path)
-export ALETHEIA_RECEIPT_SECRET=<value printed by demo>
-sentinel verify audit-logs/demo-seed42-<timestamp>.jsonl
-
-# Run the full test suite
-pytest
+sentinel demo          # scripted investigation + verifiable receipt chain
 ```
 
-For a live investigation against real SIFT evidence (requires SIFT Workstation + API key):
+`sentinel demo` runs a full scripted investigation with no API key and no SIFT
+tools installed, then writes a receipt chain you can verify (the demo prints
+the exact `sentinel verify` command and chain path).
+
+## Run on real evidence
 
 ```bash
+export ALETHEIA_RECEIPT_SECRET=$(python -c "import secrets;print(secrets.token_hex(32))")
 export ANTHROPIC_API_KEY=sk-ant-...
-sentinel run my-case-001 --image /evidence/win10-workstation.vmem
+
+# Requires Volatility 3 (`pip install volatility3`) for memory tools.
+sentinel run my-case --image /path/to/memory.img
+sentinel verify audit-logs/<chain>.jsonl
 ```
 
----
+Tools are gated by the evidence provided: a memory image enables the Volatility
+tools; a disk image enables plaso; a registry hive enables regripper; `.evtx`
+logs enable evtxecmd. The agent is never offered a tool whose evidence is
+absent.
 
 ## Architecture
 
 ```mermaid
-flowchart TD
-    A[Scout Agent\nLLM: plans next tool call] -->|ScoutDecision| B[Orchestrator\ncaps + routing]
+graph TD
+    A[Scout Agent\nLLM: plans next tool call] -->|ScoutDecision| B[Orchestrator\ncaps + routing + path pinning]
     B -->|tool_name + args| C[MCP Server\ntyped tool surface]
     C -->|parsed ToolResult| B
     B -->|append| D[Receipt Chain\nHMAC + hash-linked]
-    B -->|ToolResult| E[Nitpicker Agent\nLLM: consistency review]
-    E -->|NitpickerReview| B
-    B -->|reasoning text| F[Spectral Gate\nGeometric Brain MCP]
-    F -->|SpectralHealth| B
+    B -->|ToolResult| E[Nitpicker Agent\nLLM: evidence-grounded review]
+    E -->|accepted / rejected| B
+    B -.->|reasoning text| F[Spectral Gate\nadvisory confidence]
+    F -.->|SpectralHealth| B
     B -->|accepted findings| G[Judge Agent\nLLM: synthesize report]
     G -->|SessionResult| H[Signed Report]
 
@@ -98,78 +107,47 @@ flowchart TD
         C --> J[regripper]
         C --> K[plaso]
         C --> L[evtxecmd]
-        C --> M[...]
     end
 ```
 
-Full component descriptions and invariants: [docs/architecture.md](docs/architecture.md)
+Solid arrows are enforced control flow; the dashed spectral path is advisory.
+Full trust-boundary table in [docs/architecture.md](docs/architecture.md);
+pattern overview in [architecture.md](architecture.md).
 
----
+## Development
 
-## Trust Boundaries
+All three checks pass on this revision:
 
-| Boundary | Caller | Callee | Trust level | Notes |
-|----------|--------|--------|-------------|-------|
-| MCP tool call | Orchestrator | MCP Server | Trusted | Typed Pydantic args; no shell interpolation |
-| SIFT subprocess | MCP Server | OS process | Untrusted output | Stdout parsed before crossing back |
-| LLM API | Scout / Nitpicker / Judge | Anthropic | Semi-trusted | Outputs validated; spectral gate adds second opinion |
-| Spectral gate | Orchestrator | geometric-brain-mcp | External | r_ratio validated; network failure returns CAUTION |
-| Receipt chain | Orchestrator | Memory / disk | Verified at read | verify() re-validates HMAC before final report |
-
-Full trust boundary table: [docs/architecture.md](docs/architecture.md)
-
----
-
-## Accuracy
-
-See [docs/accuracy-report.md](docs/accuracy-report.md) for the full report with methodology disclosure.
-
-Summary (mocked tool execution against 3 fixture cases):
-
-| Metric | Value |
-|--------|-------|
-| Mean Precision | 1.000 |
-| Mean Recall | 0.667 |
-| Mean F1 | 0.767 |
-
-**These numbers come from mocked execution against fixture cases, not real SIFT evidence.**
-The benchmark harness infrastructure is complete; real measurement requires a live SIFT
-Workstation with actual memory images and event logs. See the report for full disclosure.
-
----
-
-## Repo Layout
-
-```
-src/sentinel/
-  audit/        HMAC receipt chain (receipts.py)
-  tools/        Typed SIFT tool wrappers: pslist, netscan, amcache, log2timeline, evtxecmd
-  agents/       Scout, Nitpicker, Judge (Claude), Orchestrator, wiring
-  spectral/     Geometric Brain spectral gate
-  benchmark/    Accuracy harness: cases, runner, scoring
-  cli.py        sentinel server | run | benchmark | verify | demo
-docs/
-  architecture.md     Component diagram, trust boundaries, termination caps
-  accuracy-report.md  Benchmark results with methodology disclosure
-benchmark/
-  fixtures/           Three fixture cases (credential theft, lateral movement, persistence)
-scripts/
-  generate_accuracy_report.py   Regenerates docs/accuracy-report.md from fixture cases
-tests/                101 tests, all green
+```bash
+ruff check src tests   # All checks passed!
+mypy                   # Success: no issues found in 39 source files
+pytest                 # 133 passed
 ```
 
----
+## Part of the Aletheia ecosystem
 
-## Built On
+Sentinel applies one thesis -- enforce safety architecturally, then prove it
+with a tamper-evident audit trail -- to digital forensics. Sentinel runs
+standalone (no other Aletheia repo is required to install or run it). Related
+projects that share the same enforce-and-audit pattern in other domains:
 
-- [aletheia-cyber-core](https://pypi.org/project/aletheia-cyber-core/) --
-  tri-agent pipeline, HMAC audit receipts, Ed25519 policy manifests
-- [mneme](#) -- FastMCP server patterns, typed tool surfaces
-- [geometric-brain-mcp](https://geometric-brain-mcp.onrender.com) --
-  GUE eigenvalue spacing health checks (the spectral gate)
+- [Geometric Brain MCP](https://geometric-brain-mcp.onrender.com) -- spectral
+  analysis server (optional, advisory signal only).
+- Companion projects (not required): a runtime firewall applying the pattern at
+  module-load time, and a red-team kit as the offensive counterpart that
+  attacks the same surfaces these tools defend.
 
----
+## Documentation
+
+- [Accuracy Report](docs/accuracy-report.md) -- real-evidence validation,
+  line-by-line findings verification, evidence integrity, and signing roadmap.
+- [Dataset Documentation](docs/dataset-documentation.md) -- SANS SRL-2018
+  provenance and per-host findings.
+- [Fixture Benchmark](docs/fixture-benchmark.md) -- mocked regression
+  benchmark with methodology disclosure.
+- [Architecture](docs/architecture.md) -- components, trust boundaries,
+  guardrails.
 
 ## License
 
-Apache 2.0. See [LICENSE](LICENSE).
+Apache 2.0 -- see [LICENSE](LICENSE).

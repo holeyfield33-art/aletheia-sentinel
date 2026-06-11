@@ -12,12 +12,21 @@ hackathon brief:
 - **Pattern 3 — Multi-Agent Framework.** Scout → Nitpicker → Judge.
   Specialized roles, programmatic message logging, hard iteration cap.
 
-Plus one differentiator outside the four named patterns:
+Plus two differentiators outside the four named patterns:
 
-- **Spectral self-correction.** Every Nitpicker review is sampled by the
-  [Geometric Brain MCP](https://geometric-brain-mcp.onrender.com) to compute
-  the GUE eigenvalue-spacing health of the reasoning. `STRESSED` readings
-  block the finding and force re-investigation.
+- **Evidence-grounded self-correction.** The Nitpicker reviews every finding
+  against the actual tool output and rejects unsupported claims before they
+  reach the report. Demonstrated on real SANS SRL-2018 evidence: a suspected
+  backdoor was corrected to F-Response forensic tooling via command-line
+  evidence (see [docs/accuracy-report.md](docs/accuracy-report.md), Section 2).
+- **Spectral confidence annotation (advisory).** Every Nitpicker review is
+  sampled by the [Geometric Brain MCP](https://geometric-brain-mcp.onrender.com)
+  to compute the GUE eigenvalue-spacing health of the reasoning. A
+  deterministic `STRESSED` -> re-investigate guard exists in the orchestrator,
+  but a calibration study found the signal weak (AUROC ~0.5-0.7), so it is
+  treated as advisory -- it annotates confidence and does not decide
+  acceptance in practice (live calls return CAUTION). Disclosed honestly in
+  the accuracy report.
 
 ## System diagram
 
@@ -42,7 +51,7 @@ flowchart TD
     Gate -->|HEALTHY / CAUTION / STRESSED| Orch
 
     Orch -->|when scout signals done<br/>or cap reached| Judge[Judge Agent<br/>synthesize report]
-    Judge --> Manifest[Ed25519-Signed Report<br/>findings + chain digest]
+    Judge --> Manifest[Report backed by<br/>verified HMAC receipt chain]
     Manifest --> User
 
     classDef boundary fill:#2d1b1b,stroke:#ff6b6b,stroke-width:2px,color:#fff
@@ -66,8 +75,8 @@ matters; prompt-based instructions exist only as belt-and-suspenders on top.
 | 2 | Tool surface is typed and finite | Pydantic schema in the MCP server | Compile-time | Arbitrary shell execution, command injection, calling tools the agent was not authorized for |
 | 3 | Tool output is parsed before the LLM sees it | Server-side parser per tool | Server | Context-window overload from massive text dumps; prompt injection via tool output |
 | 4 | Every execution produces an HMAC receipt | HMAC-SHA256, hash-linked chain | Cryptographic | Tampering with the audit log; forging findings; gaps in the trace |
-| 5 | Findings are gated by spectral health | GUE spacing ratio threshold | Statistical | Hallucinated findings being committed during reasoning-instability windows |
-| 6 | Final report carries an Ed25519 signature | asymmetric signing | Cryptographic | Report tampering after delivery; non-repudiation |
+| 5 | Findings are reviewed against tool output | Nitpicker review + deterministic STRESSED->re-investigate guard | Code-level | Unsupported claims reaching the report (spectral signal is advisory; see accuracy report, Section 5) |
+| 6 | Final report is backed by the verified receipt chain | `ReceiptChain.verify()` before report; HMAC-SHA256 | Cryptographic | Findings that do not trace to a receipted execution (Ed25519 asymmetric report signing is roadmap; primitive exists in companion `aletheia-cyber-core`) |
 | 7 | Orchestrator has hard caps | `max_iterations`, `max_wall_seconds`, `max_consecutive_stressed` | Code-level | Runaway agent loops, infinite conversational spirals |
 
 ### What is *not* architectural
@@ -77,10 +86,12 @@ Honest disclosure for the accuracy report:
 - **Scout's tool-selection reasoning** is prompt-based. The agent is told to
   prefer least-invasive triage steps first. Nothing stops it from calling a
   read-only-but-expensive tool prematurely beyond Nitpicker's review.
-- **Nitpicker's consistency rubric** is prompt-based. The spectral gate is
-  the architectural fallback when prompts fail.
-- **Judge's tone** is prompt-based. The signature on the final report is
-  architectural; the *wording* of the report is not.
+- **Nitpicker's consistency rubric** is prompt-based. The architectural
+  fallbacks are the termination caps and the receipt chain; the spectral
+  guard is mechanical but its signal is advisory (calibration study in the
+  accuracy report).
+- **Judge's tone** is prompt-based. The receipt chain backing the final
+  report is architectural; the *wording* of the report is not.
 
 These are documented in the accuracy report and tested for failure modes.
 
@@ -88,8 +99,8 @@ These are documented in the accuracy report and tested for failure modes.
 
 | Hackathon criterion | Where it lives |
 |---|---|
-| 1. Autonomous Execution Quality (tiebreaker) | `agents/orchestrator.py` — iteration cap + spectral re-investigate loop |
-| 2. IR Accuracy | Nitpicker + Spectral Gate (reject hallucinations before commit) |
+| 1. Autonomous Execution Quality (tiebreaker) | `agents/orchestrator.py` — iteration cap + re-investigate loop |
+| 2. IR Accuracy | Nitpicker evidence-grounded review; real-evidence validation in [docs/accuracy-report.md](docs/accuracy-report.md) |
 | 3. Breadth and Depth | `tools/` — typed wrappers per SIFT tool; depth via parser specialization |
 | 4. Constraint Implementation | This document, Boundaries 1–7 above |
 | 5. Audit Trail Quality | `audit/receipts.py` — hash-linked HMAC chain, traceable per finding |
