@@ -1,4 +1,7 @@
-"""Generate docs/accuracy-report.md from fixture benchmark cases.
+"""Generate docs/fixture-benchmark.md from fixture benchmark cases.
+
+The hand-authored real-evidence accuracy report lives in
+docs/accuracy-report.md and must NOT be overwritten by this script.
 
 Methodology: mocked tool execution against the three fixture cases in
 benchmark/fixtures/cases.json. No real SIFT Workstation, no real evidence
@@ -36,7 +39,7 @@ from sentinel.benchmark.runner import run_benchmark
 from sentinel.benchmark.scoring import BenchmarkResult, compute_score
 from sentinel.tools.base import ToolResult, ToolStatus
 
-_REPORT_PATH = Path(__file__).parent.parent / "docs" / "accuracy-report.md"
+_REPORT_PATH = Path(__file__).parent.parent / "docs" / "fixture-benchmark.md"
 _CASES_PATH = Path(__file__).parent.parent / "benchmark" / "fixtures" / "cases.json"
 
 _DEMO_SECRET = b"generate-accuracy-report-fixed-secret"
@@ -219,11 +222,13 @@ def _render_report(
     total_receipts = sum(d[0] for d in session_details)
 
     lines: list[str] = [
-        "# Aletheia Sentinel - Accuracy Report",
+        "# Aletheia Sentinel - Fixture Benchmark (regression aid)",
         "",
         "> **Methodology disclosure**: numbers in this report come from **mocked tool",
         "> execution** against fixture cases, not from a running SIFT Workstation with",
         "> real evidence files. See the Methodology section below for full details.",
+        "> Real-evidence validation results live in",
+        "> [accuracy-report.md](accuracy-report.md).",
         "",
         "---",
         "",
@@ -329,7 +334,8 @@ def _render_report(
         "3. `ANTHROPIC_API_KEY` and `ALETHEIA_RECEIPT_SECRET` in the environment.",
         "4. Running: `sentinel benchmark --cases benchmark/fixtures/cases.json`",
         "",
-        "The benchmark harness infrastructure is complete and ready to measure.",
+        "Real measurement has been performed against three SANS SRL-2018 memory",
+        "images; see [accuracy-report.md](accuracy-report.md) for those results.",
         "The ground-truth evidence files are not committed to git (enforced by .gitignore).",
         "",
         "### What is architectural (structural guarantees)",

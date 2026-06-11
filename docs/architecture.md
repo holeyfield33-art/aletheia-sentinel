@@ -55,7 +55,7 @@ All calls are Pydantic-validated. No raw shell access.
 |----------|--------|--------|-----------|-------------|-------|
 | MCP tool call | Orchestrator | MCP Server | in-process | Trusted | Typed Pydantic arguments; no shell interpolation |
 | SIFT subprocess | MCP Server | OS process | outbound | Untrusted output | Stdout is parsed into structured types before crossing back |
-| LLM API | Scout / Nitpicker / Judge | External LLM | outbound | Semi-trusted | Outputs are validated against typed schemas; hallucinations are caught by spectral gate |
+| LLM API | Scout / Nitpicker / Judge | External LLM | outbound | Semi-trusted | Outputs are validated against typed schemas; unsupported claims are rejected by the Nitpicker's evidence-grounded review; the spectral gate adds an advisory confidence annotation |
 | Spectral gate | Orchestrator | geometric-brain-mcp.onrender.com | outbound HTTPS | External service | Response validated for numeric `r_ratio`; missing field raises ValueError, not silent HEALTHY; network failure returns CAUTION |
 | Evidence images | MCP Server | Disk | read-only | Untrusted data | Never committed to git; never sent to LLM directly |
 | Receipt chain | Orchestrator | Memory / disk | internal | Trusted at write, verified at read | `verify()` re-validates HMAC and hash pointers before final report |
@@ -98,6 +98,16 @@ for deterministic behaviour without network calls. Network failures (ConnectErro
 TimeoutException, HTTPStatusError) return CAUTION rather than STRESSED to avoid
 penalising the session for infrastructure problems.
 
+**Calibration status (advisory signal):** a calibration study across four
+models found no spectral statistic that reliably separates coherent from
+degenerate generation at the tested scales (AUROC ~0.5-0.7; see the
+[accuracy report](accuracy-report.md), Section 5). The STRESSED routing above
+is a deterministic, fully-tested mechanical guard, but on live runs the gate
+returns CAUTION in practice (text-proxy r clusters at 0.41-0.43; errors
+degrade to CAUTION), so it annotates confidence rather than deciding
+acceptance. The reliable self-correction path is the Nitpicker's
+evidence-grounded review.
+
 ## Measurement
 
 ### Accuracy Benchmark Methodology
@@ -131,9 +141,11 @@ cases, rather than relying on subjective assessment.
 2. Lateral movement (PsExec service install in Security.evtx)
 3. Persistence via PowerShell-Empire stager (Amcache evidence)
 
-These are **demonstration cases** pointing to hypothetical evidence paths.
-Real accuracy numbers require actual SIFT evidence and a running SIFT
-Workstation.
+These are **demonstration cases** pointing to hypothetical evidence paths,
+used for regression of the matching logic
+([fixture-benchmark.md](fixture-benchmark.md)). Real-evidence validation
+against three SANS SRL-2018 memory images is documented in the
+[accuracy report](accuracy-report.md).
 
 **CLI:**
 ```bash
