@@ -20,7 +20,8 @@ def test_demo_module_invocation() -> None:
     assert "[CHAIN]" in result.stdout, "[CHAIN] section not found in stdout"
 
 
-def test_sentinel_package_module_invocation() -> None:
+def test_demo_package_invocation() -> None:
+    """python -m sentinel (the package itself) must also work via __main__.py."""
     result = subprocess.run(
         [sys.executable, "-m", "sentinel", "demo", "--seed", "42"],
         capture_output=True,

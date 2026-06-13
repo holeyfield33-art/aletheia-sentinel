@@ -121,7 +121,19 @@ class RemoteSpectralGate:
             )
             return SpectralHealth.CAUTION
 
-        r_ratio = _extract_r_ratio(body)
+        # The server signals its own failure modes via status/error_code and
+        # may return a null r_ratio when it lacks enough spacings to compute
+        # one (short or low-entropy samples). The gate is advisory-only: a
+        # non-numeric or error response must degrade to CAUTION, never abort
+        # the investigation and never fabricate a number.
+        try:
+            r_ratio = _extract_r_ratio(body)
+        except (ValueError, json.JSONDecodeError) as exc:
+            log.warning(
+                "spectral gate returned no usable r_ratio (returning CAUTION): %s",
+                exc,
+            )
+            return SpectralHealth.CAUTION
         return classify(r_ratio)
 
 
@@ -189,6 +201,16 @@ def _extract_r_ratio(body: dict[str, object]) -> float:
                         inner = json.loads(first["text"])
                         if isinstance(inner, dict):
                             value = inner.get("r_ratio")
+                            if not isinstance(value, (int, float)):
+                                # Server computed a response but no ratio --
+                                # surface its own status/error_code so the
+                                # degradation reason is visible in logs.
+                                status = inner.get("status")
+                                err = inner.get("error_code")
+                                raise ValueError(
+                                    "brain_health_check returned no r_ratio "
+                                    f"(status={status!r}, error_code={err!r})"
+                                )
     if not isinstance(value, (int, float)):
         raise ValueError(
             f"brain_health_check response missing numeric r_ratio: {body!r}"
