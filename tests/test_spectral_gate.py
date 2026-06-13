@@ -196,12 +196,75 @@ async def test_top_level_r_ratio_also_parsed() -> None:
     assert result is SpectralHealth.HEALTHY
 
 
-async def test_missing_r_ratio_raises_value_error() -> None:
-    """A response without r_ratio must raise ValueError (not silently return HEALTHY)."""
+async def test_missing_r_ratio_degrades_to_caution_never_healthy() -> None:
+    """A response without r_ratio must degrade to CAUTION, never silently HEALTHY.
+
+    The gate is advisory: a malformed/unmappable response should not abort the
+    investigation, but it must also never be treated as a clean signal.
+    """
     gate = RemoteSpectralGate()
     body: dict[str, object] = {"result": {"some_other_field": 1}}
     mock_client = _make_mock_client(body)
 
     with patch("sentinel.spectral.gate.httpx.AsyncClient", return_value=mock_client):
-        with pytest.raises(ValueError, match="r_ratio"):
-            await gate.evaluate("test")
+        result = await gate.evaluate("test")
+
+    assert result is SpectralHealth.CAUTION
+
+
+def test_extract_r_ratio_still_raises_on_missing() -> None:
+    """The extraction helper itself fails loud; evaluate() is what degrades.
+
+    Keeping the helper strict means any new caller can't accidentally treat a
+    missing ratio as valid -- they must handle the ValueError deliberately.
+    """
+    from sentinel.spectral.gate import _extract_r_ratio
+
+    with pytest.raises(ValueError, match="r_ratio"):
+        _extract_r_ratio({"result": {"some_other_field": 1}})
+
+
+# ---------------------------------------------------------------------------
+# Live-server response shape (MCP streamable-HTTP, schema 1.1.x)
+# ---------------------------------------------------------------------------
+
+
+async def test_r_ratio_extracted_from_content_text() -> None:
+    """Live server nests r_ratio as a JSON string in result.content[0].text."""
+    gate = RemoteSpectralGate()
+    inner = '{"status": "warning", "r_ratio": 0.40301, "regime": "poisson_like"}'
+    body: dict[str, object] = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {"content": [{"type": "text", "text": inner}], "isError": False},
+    }
+    mock_client = _make_mock_client(body)
+
+    with patch("sentinel.spectral.gate.httpx.AsyncClient", return_value=mock_client):
+        result = await gate.evaluate("reasoning sample from a live run")
+
+    assert result is SpectralHealth.CAUTION  # 0.40301 falls in the CAUTION band
+
+
+async def test_insufficient_data_degrades_to_caution() -> None:
+    """Server returns a valid response but null r_ratio (too few spacings).
+
+    The gate is advisory-only: this must degrade to CAUTION, never crash the
+    investigation and never fabricate a numeric ratio.
+    """
+    gate = RemoteSpectralGate()
+    inner = (
+        '{"status": "insufficient_data", "error_code": "TOO_FEW_SPACINGS", '
+        '"r_ratio": null, "spacing_count": 3}'
+    )
+    body: dict[str, object] = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {"content": [{"type": "text", "text": inner}], "isError": False},
+    }
+    mock_client = _make_mock_client(body)
+
+    with patch("sentinel.spectral.gate.httpx.AsyncClient", return_value=mock_client):
+        result = await gate.evaluate("short reasoning sample")
+
+    assert result is SpectralHealth.CAUTION
