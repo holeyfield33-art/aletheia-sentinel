@@ -238,3 +238,97 @@ def test_one_reported_satisfies_only_one_expected() -> None:
     assert len(result.missed) == 1
     assert result.precision == pytest.approx(1.0)
     assert result.recall == pytest.approx(0.5)
+
+
+# ---------------------------------------------------------------------------
+# Test 11: nested list payload (real tool result shape)
+# ---------------------------------------------------------------------------
+
+
+def test_nested_list_payload_matches() -> None:
+    """key_fields must match fields inside a nested list of records (real pslist shape)."""
+    expected = [_finding("process", name="mimikatz", pid="1234")]
+    reported = [
+        ToolResult(
+            tool_name="volatility.pslist",
+            status=ToolStatus.OK,
+            payload={"processes": [{"pid": 1234, "name": "mimikatz.exe", "ppid": 4}]},
+        )
+    ]
+
+    result = compute_score(expected, reported)
+
+    assert result.precision == pytest.approx(1.0)
+    assert result.recall == pytest.approx(1.0)
+    assert len(result.matched) == 1
+
+
+# ---------------------------------------------------------------------------
+# Test 12: nested list -- all key_fields must come from the same record
+# ---------------------------------------------------------------------------
+
+
+def test_nested_list_all_fields_must_match_same_record() -> None:
+    """A finding mixing fields from two different process entries must not match."""
+    expected = [_finding("process", name="mimikatz.exe", pid="5678")]
+    reported = [
+        ToolResult(
+            tool_name="volatility.pslist",
+            status=ToolStatus.OK,
+            payload={
+                "processes": [
+                    {"pid": 1234, "name": "mimikatz.exe"},
+                    {"pid": 5678, "name": "notepad.exe"},
+                ]
+            },
+        )
+    ]
+
+    result = compute_score(expected, reported)
+
+    assert len(result.matched) == 0
+    assert len(result.missed) == 1
+
+
+# ---------------------------------------------------------------------------
+# Test 13: nested dict payload (e.g. event summary wrapper)
+# ---------------------------------------------------------------------------
+
+
+def test_nested_dict_payload_matches() -> None:
+    """key_fields must match inside a nested dict (not just the top-level payload)."""
+    expected = [_finding("event", event_id="4624")]
+    reported = [
+        ToolResult(
+            tool_name="evtxecmd.security",
+            status=ToolStatus.OK,
+            payload={"events": [{"event_id": 4624, "level": "Information"}]},
+        )
+    ]
+
+    result = compute_score(expected, reported)
+
+    assert result.recall == pytest.approx(1.0)
+    assert len(result.matched) == 1
+
+
+# ---------------------------------------------------------------------------
+# Test 14: nested payload -- no match when field absent in every record
+# ---------------------------------------------------------------------------
+
+
+def test_nested_list_no_match_when_field_absent() -> None:
+    """A key_field absent from every nested record must not match."""
+    expected = [_finding("process", name="mimikatz.exe", nonexistent="x")]
+    reported = [
+        ToolResult(
+            tool_name="volatility.pslist",
+            status=ToolStatus.OK,
+            payload={"processes": [{"pid": 1234, "name": "mimikatz.exe"}]},
+        )
+    ]
+
+    result = compute_score(expected, reported)
+
+    assert len(result.matched) == 0
+    assert len(result.missed) == 1
