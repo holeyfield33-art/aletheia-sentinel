@@ -51,13 +51,15 @@ against raw Volatility output. See the
 - **Spoliation-safe.** Read-only pipeline; the source image hash is unchanged
   after analysis, matching the original acquisition log.
 
-*Experimental signal (advisory):* an optional spectral confidence score (via
-Geometric Brain MCP) annotates findings. A calibration study across four models
-found it weak and non-decisive (AUROC ~0.5-0.7), so it informs confidence but
-is not relied on as a hallucination detector -- the decisive rejection path is
-the Nitpicker's evidence-grounded review, with a deterministic
-STRESSED->re-investigate guard retained in the orchestrator as defense-in-depth.
-We report this honestly rather than claim a detector the data does not support.
+*Experimental signal (advisory, off by default):* an optional spectral
+confidence score (via Geometric Brain MCP) can be enabled with `--spectral`.
+A calibration study across four models found it weak and non-decisive
+(AUROC ~0.5-0.7), and the live service returns `INSUFFICIENT_DATA` on
+forensic-length samples, so it is opt-in rather than a silent external
+dependency. The decisive rejection path is the Nitpicker's evidence-grounded
+review, with a deterministic STRESSED->re-investigate guard retained in the
+orchestrator as defense-in-depth. We report this honestly rather than claim a
+detector the data does not support.
 Details in the [accuracy report](docs/accuracy-report.md).
 
 ## Quickstart (60 seconds, no API key)

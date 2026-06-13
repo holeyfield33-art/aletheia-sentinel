@@ -24,13 +24,13 @@ from pathlib import Path
 from typing import Any
 
 from sentinel.agents.llm import ClaudeJudge, ClaudeNitpicker, ClaudeScout, make_client
-from sentinel.agents.orchestrator import Orchestrator, OrchestratorConfig
+from sentinel.agents.orchestrator import Orchestrator, OrchestratorConfig, SpectralGate
 from sentinel.agents.wiring import build_executor
 from sentinel.audit.receipts import ChainIntegrityError, ReceiptChain, secret_from_env
 from sentinel.benchmark.cases import Case, ExpectedFinding
 from sentinel.benchmark.runner import OrchestratorProtocol, run_benchmark
 from sentinel.benchmark.scoring import BenchmarkResult
-from sentinel.spectral.gate import RemoteSpectralGate
+from sentinel.spectral.gate import NullSpectralGate, RemoteSpectralGate
 from sentinel.tools.base import ToolResult, ToolStatus
 
 log = logging.getLogger(__name__)
@@ -453,6 +453,7 @@ async def _run_investigation(
     hive_path: Path | None,
     evtx_path: Path | None,
     max_iterations: int,
+    use_spectral: bool = False,
 ) -> int:
     if image_path is not None:
         log.info("Evidence image: %s (pinned)", image_path)
@@ -474,7 +475,9 @@ async def _run_investigation(
     scout = ClaudeScout(client=client, tool_catalog=tool_catalog)
     nitpicker = ClaudeNitpicker(client=client)
     judge = ClaudeJudge(client=client)
-    gate = RemoteSpectralGate()
+    gate: SpectralGate = RemoteSpectralGate() if use_spectral else NullSpectralGate()
+    if use_spectral:
+        log.info("Spectral gate ENABLED (experimental, external service).")
 
     from sentinel.server import server  # local import avoids circular at module level
 
@@ -711,6 +714,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 hive_path=hive_path,
                 evtx_path=evtx_path,
                 max_iterations=args.max_iterations,
+                use_spectral=args.spectral,
             )
         )
     except RuntimeError as exc:
@@ -771,6 +775,15 @@ def main() -> None:
         default=50,
         metavar="N",
         help="Hard cap on Scout decisions (default: 50).",
+    )
+    run_p.add_argument(
+        "--spectral",
+        action="store_true",
+        help=(
+            "Enable the experimental spectral gate (external Geometric Brain "
+            "service). Off by default: advisory-only and returns "
+            "INSUFFICIENT_DATA on forensic-length samples."
+        ),
     )
 
     bench_p = sub.add_parser("benchmark", help="Run the accuracy benchmark harness.")

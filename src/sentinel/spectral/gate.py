@@ -151,6 +151,20 @@ class FixedSpectralGate:
         return self._verdict
 
 
+class NullSpectralGate:
+    """No-op gate: spectral analysis disabled.
+
+    Always returns HEALTHY, so it never rejects a finding and makes no
+    network calls. This is the default for investigations: the spectral
+    gate is advisory and experimental, and the live Geometric Brain service
+    returns INSUFFICIENT_DATA on forensic-length samples, so it is opt-in
+    (``--spectral``) rather than a silent external dependency in every run.
+    """
+
+    async def evaluate(self, sample: str) -> SpectralHealth:
+        return SpectralHealth.HEALTHY
+
+
 def classify(r_ratio: float) -> SpectralHealth:
     """Map a GUE spacing ratio to a health classification.
 
