@@ -30,9 +30,10 @@ lateral link (rd01 -> wkstn-05 via inbound SMB) -- a documented multi-host,
 multi-technique campaign. The pipeline surfaced the real implant (`p.exe` in
 `c:\windows\temp\perfmon`), the WMI->PowerShell->rundll32 beacon chains, and
 caught its own false positive: a binary first flagged as a backdoor was
-correctly identified as F-Response forensic tooling via command-line evidence
--- a trap that recurred on all three hosts and was resolved by evidence each
-time. All three receipt chains verify. Findings were independently verified
+correctly identified as F-Response forensic tooling on rd01 from its own
+network activity and command line -- a trap that recurred on all three hosts,
+resolved where the identifying evidence was present and held as "suspicious
+pending verification" where it was absent. All three receipt chains verify. Findings were independently verified
 against raw Volatility output. See the
 [accuracy report](docs/accuracy-report.md).
 
@@ -42,9 +43,13 @@ against raw Volatility output. See the
   typed tool surface, so the agent physically cannot run them. Evidence paths
   are pinned server-side -- the agent cannot redirect a tool at an arbitrary
   file, and tools are gated by which evidence was actually provided.
-- **Evidence-grounded self-correction.** The Nitpicker agent reviews every
-  finding against the actual tool output and rejects unsupported claims before
-  they reach the report. This is the reliable self-correction path.
+- **Evidence-bounded classification.** Identity discipline is split across two
+  agents: the Scout must verify a flagged process's identity from evidence
+  (command line, or correlation of its network activity to known
+  infrastructure) before concluding, and the Judge will not report a process as
+  malicious -- or let it drive the compromise verdict -- unless that identity is
+  established in the findings; otherwise it is held as "suspicious pending
+  verification." The Nitpicker is a consistency reviewer, not an evidence gate.
 - **Tamper-evident audit trail.** Every tool execution writes an HMAC-signed,
   hash-linked receipt (SHA-256 of input and output). Altering any receipt
   breaks verification -- findings trace to executions.
@@ -56,8 +61,9 @@ confidence score (via Geometric Brain MCP) can be enabled with `--spectral`.
 A calibration study across four models found it weak and non-decisive
 (AUROC ~0.5-0.7), and the live service returns `INSUFFICIENT_DATA` on
 forensic-length samples, so it is opt-in rather than a silent external
-dependency. The decisive rejection path is the Nitpicker's evidence-grounded
-review, with a deterministic STRESSED->re-investigate guard retained in the
+dependency. The reliable evidence-discipline path is the Scout's
+identity-verification rule combined with the Judge's evidence-bounded synthesis,
+with a deterministic STRESSED->re-investigate guard retained in the
 orchestrator as defense-in-depth. We report this honestly rather than claim a
 detector the data does not support.
 Details in the [accuracy report](docs/accuracy-report.md).
@@ -97,7 +103,7 @@ graph TD
     B -->|tool_name + args| C[MCP Server\ntyped tool surface]
     C -->|parsed ToolResult| B
     B -->|append| D[Receipt Chain\nHMAC + hash-linked]
-    B -->|ToolResult| E[Nitpicker Agent\nLLM: evidence-grounded review]
+    B -->|ToolResult| E[Nitpicker Agent\nLLM: consistency review]
     E -->|accepted / rejected| B
     B -.->|reasoning text| F[Spectral Gate\nadvisory confidence]
     F -.->|SpectralHealth| B
