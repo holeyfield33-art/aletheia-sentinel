@@ -14,14 +14,22 @@ hackathon brief:
 
 Plus two differentiators outside the four named patterns:
 
-- **Evidence-grounded self-correction.** The Nitpicker reviews every finding
-  against the actual tool output and rejects unsupported claims before they
-  reach the report. Demonstrated on real SANS SRL-2018 evidence: a suspected
-  backdoor was corrected to F-Response forensic tooling via command-line
-  evidence (see [docs/accuracy-report.md](docs/accuracy-report.md), Section 2).
-- **Spectral confidence annotation (advisory).** Every Nitpicker review is
-  sampled by the [Geometric Brain MCP](https://geometric-brain-mcp.onrender.com)
-  to compute the GUE eigenvalue-spacing health of the reasoning. A
+- **Evidence-grounded self-correction.** The Scout must verify a flagged
+  process's identity from evidence -- its command line or network correlation
+  to known infrastructure -- before concluding it is malicious, and the Judge
+  applies an evidence-bounded classification rule when synthesizing the report:
+  a process whose identity cannot be established stays "suspicious pending
+  verification" rather than being asserted as a backdoor, while processes with
+  evidenced malice are reported with confidence. (The Nitpicker is a
+  consistency reviewer, not an evidence-grounding gate.) Demonstrated on real
+  SANS SRL-2018 evidence: a suspected backdoor was corrected to F-Response
+  forensic tooling via command-line evidence (see
+  [docs/accuracy-report.md](docs/accuracy-report.md), Section 2).
+- **Spectral confidence annotation (advisory, opt-in).** When enabled with
+  `--spectral`, each Nitpicker review is sampled by the
+  [Geometric Brain MCP](https://geometric-brain-mcp.onrender.com) to compute the
+  GUE eigenvalue-spacing health of the reasoning; the default gate is a no-op
+  (`NullSpectralGate`), so standard runs do not call the service. A
   deterministic `STRESSED` -> re-investigate guard exists in the orchestrator,
   but a calibration study found the signal weak (AUROC ~0.5-0.7), so it is
   treated as advisory -- it annotates confidence and does not decide
@@ -75,7 +83,7 @@ matters; prompt-based instructions exist only as belt-and-suspenders on top.
 | 2 | Tool surface is typed and finite | Pydantic schema in the MCP server | Compile-time | Arbitrary shell execution, command injection, calling tools the agent was not authorized for |
 | 3 | Tool output is parsed before the LLM sees it | Server-side parser per tool | Server | Context-window overload from massive text dumps; prompt injection via tool output |
 | 4 | Every execution produces an HMAC receipt | HMAC-SHA256, hash-linked chain | Cryptographic | Tampering with the audit log; forging findings; gaps in the trace |
-| 5 | Findings are reviewed against tool output | Nitpicker review + deterministic STRESSED->re-investigate guard | Code-level | Unsupported claims reaching the report (spectral signal is advisory; see accuracy report, Section 5) |
+| 5 | Findings are classified against evidence | Scout identity-verification + Judge evidence-bounded synthesis (prompt); Nitpicker consistency review + deterministic STRESSED->re-investigate guard + termination caps (code) | Prompt + code | Unverified processes asserted as malicious; unsupported claims reaching the report (spectral signal is advisory; see accuracy report, Section 5) |
 | 6 | Final report is backed by the verified receipt chain | `ReceiptChain.verify()` before report; HMAC-SHA256 | Cryptographic | Findings that do not trace to a receipted execution (Ed25519 asymmetric report signing is roadmap; primitive exists in companion `aletheia-cyber-core`) |
 | 7 | Orchestrator has hard caps | `max_iterations`, `max_wall_seconds`, `max_consecutive_stressed` | Code-level | Runaway agent loops, infinite conversational spirals |
 
@@ -84,8 +92,9 @@ matters; prompt-based instructions exist only as belt-and-suspenders on top.
 Honest disclosure for the accuracy report:
 
 - **Scout's tool-selection reasoning** is prompt-based. The agent is told to
-  prefer least-invasive triage steps first. Nothing stops it from calling a
-  read-only-but-expensive tool prematurely beyond Nitpicker's review.
+  verify a flagged process's identity from evidence before concluding, but
+  nothing mechanically stops it from calling a read-only-but-expensive tool
+  prematurely beyond the termination caps.
 - **Nitpicker's consistency rubric** is prompt-based. The architectural
   fallbacks are the termination caps and the receipt chain; the spectral
   guard is mechanical but its signal is advisory (calibration study in the

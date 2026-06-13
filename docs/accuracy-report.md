@@ -41,8 +41,8 @@ movement, establishing a coordinated campaign rather than isolated compromises:
   (WinRM to 172.16.5.21; subject_srv sessions to 172.16.5.50).
 - **Multiple attack techniques observed:** rd01 ran a `p.exe` implant via
   WMI->PowerShell; wkstn-05 ran a WMI->PowerShell->`rundll32` chain (Cobalt
-  Strike/Empire-style DLL payload loading). The pipeline surfaced both -- generalizing
-  across techniques, not just hosts.
+  Strike/Empire-style DLL payload loading). The pipeline surfaced both -- evidence the
+  typed tools and the agent loop handle more than one technique, validated per host.
 
 ### Findings verification -- independent spot-check (wkstn-01)
 
@@ -102,12 +102,18 @@ subject_srv.exe -s "base-hunt.shieldbase.lan:5682" -l 3262 -v "F-Response Subjec
 deployed by the IR team. The finding was **corrected from suspected-backdoor to
 informational.**
 
-**Reinforced on a third host.** wkstn-05 again surfaced `subject_srv.ex` (PID 3548,
-TCP 3262, session to 172.16.5.50) and the agent again flagged it as possibly
-attacker-installed. This recurrence across three hosts demonstrates the trap is
-systematic -- a legitimately-deployed forensic tool that pattern-matches as malicious --
-and that command-line evidence, not name/port heuristics, is what resolves it. The
-self-correction generalizes.
+**Resolves where the evidence is present; cautious where it is not.** On rd01, where
+`subject_srv.exe`'s own network activity reveals F-Response infrastructure
+(`base-hunt.shieldbase.lan:5682`, the F-Response hunt server) and the command line is
+recoverable, the agent identifies it as legitimate tooling. On wkstn-01 and wkstn-05 --
+where that 5682 connection is absent from the image and the command-line memory is paged
+out -- the identifying evidence is simply not present, so the agent holds `subject_srv`
+as "suspicious pending verification" rather than asserting either malice or innocence.
+The recurrence across three hosts shows the trap is systematic -- a legitimately-deployed
+forensic tool that pattern-matches as malicious -- and that the verdict must track the
+evidence available on each host: command-line or network correlation resolves it where
+present, honest caution covers it where absent. This is evidence-bounded classification,
+not a claim that the correction generalizes unconditionally across hosts.
 
 **Why this matters.** A real false positive caught by deeper evidence: classification
 must be evidence-bounded, multi-host correlation resolves what a single paged-out
@@ -175,8 +181,10 @@ deterministic STRESSED -> reject-and-reinvestigate guard
 gate calls return CAUTION -- text-proxy r-ratios cluster at 0.41-0.43 for English
 prose regardless of content, and service errors degrade gracefully to CAUTION -- so
 the gate does not decide acceptance on real runs. The reliable self-correction path
-is the Nitpicker's evidence-grounded review (Sections 1-2). This negative result is
-reported deliberately rather than overclaiming a detector the data does not support.
+is the Scout's evidence-based identity-verification rule together with the Judge's
+evidence-bounded synthesis (Sections 1-2); the Nitpicker is a consistency reviewer, not
+an evidence-grounding gate. This negative result is reported deliberately rather than
+overclaiming a detector the data does not support.
 
 > Note: the gate calls the companion Geometric Brain service, which returns a 307
 > redirect (`/mcp` -> `/mcp/`). The gate handles this gracefully (returns CAUTION and
