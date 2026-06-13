@@ -180,10 +180,10 @@ deterministic STRESSED -> reject-and-reinvestigate guard
 (`src/sentinel/agents/orchestrator.py`) as defense-in-depth, but in practice live
 gate calls return CAUTION -- text-proxy r-ratios cluster at 0.41-0.43 for English
 prose regardless of content, and service errors degrade gracefully to CAUTION -- so
-the gate does not decide acceptance on real runs. The reliable self-correction path
-is the Scout's evidence-based identity-verification rule together with the Judge's
-evidence-bounded synthesis (Sections 1-2); the Nitpicker is a consistency reviewer, not
-an evidence-grounding gate. This negative result is reported deliberately rather than
+the gate does not decide acceptance on real runs. The reliable evidence-discipline
+path is the Scout's identity-verification rule combined with the Judge's
+evidence-bounded synthesis (Sections 1-2); the Nitpicker is a consistency reviewer,
+not an evidence gate. This negative result is reported deliberately rather than
 overclaiming a detector the data does not support.
 
 > Note: the gate calls the companion Geometric Brain service, which returns a 307

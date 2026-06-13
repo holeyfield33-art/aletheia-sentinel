@@ -14,23 +14,22 @@ hackathon brief:
 
 Plus two differentiators outside the four named patterns:
 
-- **Evidence-grounded self-correction.** The Scout must verify a flagged
-  process's identity from evidence -- its command line or network correlation
-  to known infrastructure -- before concluding it is malicious, and the Judge
-  applies an evidence-bounded classification rule when synthesizing the report:
-  a process whose identity cannot be established stays "suspicious pending
-  verification" rather than being asserted as a backdoor, while processes with
-  evidenced malice are reported with confidence. (The Nitpicker is a
-  consistency reviewer, not an evidence-grounding gate.) Demonstrated on real
-  SANS SRL-2018 evidence: a suspected backdoor was corrected to F-Response
-  forensic tooling via command-line evidence (see
-  [docs/accuracy-report.md](docs/accuracy-report.md), Section 2).
-- **Spectral confidence annotation (advisory, opt-in).** When enabled with
-  `--spectral`, each Nitpicker review is sampled by the
+- **Evidence-bounded classification.** Identity discipline is split across two
+  agents: the Scout must verify a flagged process's identity from evidence
+  (command line, or correlation of its network activity to known
+  infrastructure) before concluding, and the Judge must not report a process as
+  malicious, or let it drive the compromise verdict, unless that identity is
+  established in the findings -- otherwise it is held as "suspicious pending
+  verification." The Nitpicker is a consistency reviewer, not an evidence gate.
+  Demonstrated on real SANS SRL-2018 evidence: on rd01 a suspected backdoor was
+  identified as F-Response forensic tooling from its own network activity and
+  command line; on hosts where that evidence is absent, the agent declines to
+  assert malice (see [docs/accuracy-report.md](docs/accuracy-report.md), Section 2).
+- **Spectral confidence annotation (experimental, off by default).** When
+  enabled with `--spectral`, each Nitpicker review can be sampled by the
   [Geometric Brain MCP](https://geometric-brain-mcp.onrender.com) to compute the
-  GUE eigenvalue-spacing health of the reasoning; the default gate is a no-op
-  (`NullSpectralGate`), so standard runs do not call the service. A
-  deterministic `STRESSED` -> re-investigate guard exists in the orchestrator,
+  GUE eigenvalue-spacing health of the reasoning. A deterministic `STRESSED` ->
+  re-investigate guard exists in the orchestrator,
   but a calibration study found the signal weak (AUROC ~0.5-0.7), so it is
   treated as advisory -- it annotates confidence and does not decide
   acceptance in practice (live calls return CAUTION). Disclosed honestly in
@@ -83,7 +82,7 @@ matters; prompt-based instructions exist only as belt-and-suspenders on top.
 | 2 | Tool surface is typed and finite | Pydantic schema in the MCP server | Compile-time | Arbitrary shell execution, command injection, calling tools the agent was not authorized for |
 | 3 | Tool output is parsed before the LLM sees it | Server-side parser per tool | Server | Context-window overload from massive text dumps; prompt injection via tool output |
 | 4 | Every execution produces an HMAC receipt | HMAC-SHA256, hash-linked chain | Cryptographic | Tampering with the audit log; forging findings; gaps in the trace |
-| 5 | Findings are classified against evidence | Scout identity-verification + Judge evidence-bounded synthesis (prompt); Nitpicker consistency review + deterministic STRESSED->re-investigate guard + termination caps (code) | Prompt + code | Unverified processes asserted as malicious; unsupported claims reaching the report (spectral signal is advisory; see accuracy report, Section 5) |
+| 5 | Classifications are bounded by evidence | Scout identity-verification rule + Judge evidence-bounded synthesis; Nitpicker consistency review | Prompt-level (with receipt-chain + termination-cap fallbacks) | A process asserted malicious on name/port alone; an unverified process driving the verdict (spectral gate is advisory/off by default; see accuracy report, Section 5) |
 | 6 | Final report is backed by the verified receipt chain | `ReceiptChain.verify()` before report; HMAC-SHA256 | Cryptographic | Findings that do not trace to a receipted execution (Ed25519 asymmetric report signing is roadmap; primitive exists in companion `aletheia-cyber-core`) |
 | 7 | Orchestrator has hard caps | `max_iterations`, `max_wall_seconds`, `max_consecutive_stressed` | Code-level | Runaway agent loops, infinite conversational spirals |
 
@@ -109,7 +108,7 @@ These are documented in the accuracy report and tested for failure modes.
 | Hackathon criterion | Where it lives |
 |---|---|
 | 1. Autonomous Execution Quality (tiebreaker) | `agents/orchestrator.py` — iteration cap + re-investigate loop |
-| 2. IR Accuracy | Nitpicker evidence-grounded review; real-evidence validation in [docs/accuracy-report.md](docs/accuracy-report.md) |
+| 2. IR Accuracy | Scout identity-verification rule + Judge evidence-bounded synthesis (Nitpicker consistency review); real-evidence validation in [docs/accuracy-report.md](docs/accuracy-report.md) |
 | 3. Breadth and Depth | `tools/` — typed wrappers per SIFT tool; depth via parser specialization |
 | 4. Constraint Implementation | This document, Boundaries 1–7 above |
 | 5. Audit Trail Quality | `audit/receipts.py` — hash-linked HMAC chain, traceable per finding |
