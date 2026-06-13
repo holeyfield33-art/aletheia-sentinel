@@ -19,6 +19,7 @@ from sentinel.tools.base import ToolResult, ToolStatus
 from sentinel.tools.evtxecmd_security import EvtxSecurityInput, evtxecmd_security
 from sentinel.tools.plaso_log2timeline import Log2TimelineInput, plaso_log2timeline
 from sentinel.tools.regripper_amcache import AmcacheInput, regripper_amcache
+from sentinel.tools.volatility_cmdline import CmdlineInput, volatility_cmdline
 from sentinel.tools.volatility_netscan import NetscanInput, volatility_netscan
 from sentinel.tools.volatility_pslist import PslistInput, volatility_pslist
 
@@ -32,6 +33,10 @@ async def _exec_pslist(args: dict[str, object]) -> ToolResult:
 
 async def _exec_netscan(args: dict[str, object]) -> ToolResult:
     return await volatility_netscan(NetscanInput.model_validate(args))
+
+
+async def _exec_cmdline(args: dict[str, object]) -> ToolResult:
+    return await volatility_cmdline(CmdlineInput.model_validate(args))
 
 
 async def _exec_amcache(args: dict[str, object]) -> ToolResult:
@@ -49,6 +54,7 @@ async def _exec_parse_security(args: dict[str, object]) -> ToolResult:
 _DISPATCH: dict[str, Callable[[dict[str, object]], Awaitable[ToolResult]]] = {
     "volatility.pslist": _exec_pslist,
     "volatility.netscan": _exec_netscan,
+    "volatility.cmdline": _exec_cmdline,
     "regripper.amcache": _exec_amcache,
     "plaso.log2timeline": _exec_log2timeline,
     "evtxecmd.parse_security": _exec_parse_security,
@@ -88,7 +94,10 @@ def build_executor(
             )
 
         # Fast-fail if the required evidence was not supplied for this tool.
-        if tool_name in ("volatility.pslist", "volatility.netscan") and evidence_image is None:
+        if (
+            tool_name in ("volatility.pslist", "volatility.netscan", "volatility.cmdline")
+            and evidence_image is None
+        ):
             return ToolResult(
                 tool_name=tool_name,
                 status=ToolStatus.ERROR,
@@ -118,7 +127,10 @@ def build_executor(
 
         # Pin evidence paths: override whatever path Scout invented with the
         # real path captured from the CLI flags.
-        if tool_name in ("volatility.pslist", "volatility.netscan") and evidence_image:
+        if (
+            tool_name in ("volatility.pslist", "volatility.netscan", "volatility.cmdline")
+            and evidence_image
+        ):
             args = {**args, "memory_image": str(evidence_image)}
         if tool_name == "plaso.log2timeline" and evidence_disk:
             args = {**args, "image_path": str(evidence_disk)}

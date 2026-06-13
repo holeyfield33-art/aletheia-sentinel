@@ -23,9 +23,7 @@ from unittest.mock import AsyncMock, patch
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from sentinel.tools.base import ToolStatus
-from sentinel.tools.volatility_pslist import PslistInput, Process, volatility_pslist
-
-
+from sentinel.tools.volatility_pslist import Process, PslistInput, volatility_pslist
 # ---------------------------------------------------------------------------
 # Sample A: REAL Volatility 3 JSON format
 # Keys match the column names defined in windows.pslist.PsList.run():

@@ -7,7 +7,7 @@ evidence-grounded self-correction -- every finding traces to a tool execution.**
 
 [![FIND EVIL! Hackathon](https://img.shields.io/badge/Hackathon-FIND%20EVIL!-red)](https://findevil.devpost.com/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![CI](https://img.shields.io/badge/CI-passing-brightgreen)](https://github.com/holeyfield33-art/aletheia-sentinel/actions)
+[![CI](https://github.com/holeyfield33-art/aletheia-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/holeyfield33-art/aletheia-sentinel/actions/workflows/ci.yml)
 
 *SANS "Find Evil!" Hackathon -- Architectural Approach #2: Custom MCP Server*
 
@@ -18,8 +18,8 @@ evidence-grounded self-correction -- every finding traces to a tool execution.**
 ## What it does
 
 Sentinel is a custom MCP server that gives an autonomous agent a typed forensic
-tool surface -- `volatility_pslist`, `volatility_netscan`, `regripper_amcache`,
-`plaso_log2timeline`, `evtxecmd_security` -- instead of raw shell. A three-agent
+tool surface -- `volatility_pslist`, `volatility_netscan`, `volatility_cmdline`,
+`regripper_amcache`, `plaso_log2timeline`, `evtxecmd_security` -- instead of raw shell. A three-agent
 loop (Scout plans, Nitpicker reviews, Judge synthesizes) triages a memory or
 disk image and produces an incident report where every claim is backed by a
 cryptographically-receipted tool execution.

@@ -302,12 +302,13 @@ async def test_chain_validates_after_session(hmac_secret: bytes, session_id: str
 
 
 async def test_wiring_known_tools_exist_in_dispatch() -> None:
-    """All five canonical tool names must be present in the dispatch table."""
+    """All six canonical tool names must be present in the dispatch table."""
     from sentinel.agents.wiring import _DISPATCH
 
     expected = {
         "volatility.pslist",
         "volatility.netscan",
+        "volatility.cmdline",
         "regripper.amcache",
         "plaso.log2timeline",
         "evtxecmd.parse_security",
