@@ -14,6 +14,7 @@ path with real value, and that is what production wiring will use.
 
 from __future__ import annotations
 
+import json
 import logging
 
 import httpx
@@ -45,7 +46,7 @@ class RemoteSpectralGate:
     def __init__(
         self,
         *,
-        endpoint: str = "https://geometric-brain-mcp.onrender.com/mcp",
+        endpoint: str = "https://geometric-brain-mcp.onrender.com/mcp/",
         timeout_seconds: float = 10.0,
     ) -> None:
         self._endpoint = endpoint
@@ -57,21 +58,55 @@ class RemoteSpectralGate:
             # rather than HEALTHY so the orchestrator stays conservative.
             return SpectralHealth.CAUTION
 
-        payload = {
+        # Geometric Brain runs MCP streamable-HTTP, which requires a session
+        # handshake before tools/call: initialize -> capture the
+        # mcp-session-id response header -> notifications/initialized ->
+        # tools/call with that header. A bare tools/call POST is rejected
+        # with "Missing session ID". Arguments are wrapped in "params" to
+        # match the server's brain_health_check schema.
+        init_payload = {
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "aletheia-sentinel", "version": "0.1.0"},
+            },
+        }
+        call_payload = {
             "jsonrpc": "2.0",
             "id": 1,
             "method": "tools/call",
             "params": {
                 "name": "brain_health_check",
-                "arguments": {"text": sample},
+                "arguments": {"params": {"text": sample}},
             },
         }
 
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.post(self._endpoint, json=payload)
+            async with httpx.AsyncClient(
+                timeout=self._timeout,
+                follow_redirects=True,
+                headers={
+                    "Accept": "application/json, text/event-stream",
+                    "Content-Type": "application/json",
+                },
+            ) as client:
+                init = await client.post(self._endpoint, json=init_payload)
+                init.raise_for_status()
+                session_id = init.headers.get("mcp-session-id")
+                session = {"mcp-session-id": session_id} if session_id else {}
+                await client.post(
+                    self._endpoint,
+                    json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+                    headers=session,
+                )
+                response = await client.post(
+                    self._endpoint, json=call_payload, headers=session
+                )
                 response.raise_for_status()
-                body: dict[str, object] = response.json()
+                body: dict[str, object] = _parse_mcp_body(response)
         except httpx.ConnectError as exc:
             log.warning("spectral gate connect error (returning CAUTION): %s", exc)
             return SpectralHealth.CAUTION
@@ -116,18 +151,44 @@ def classify(r_ratio: float) -> SpectralHealth:
     return SpectralHealth.STRESSED
 
 
+def _parse_mcp_body(response: httpx.Response) -> dict[str, object]:
+    """Decode an MCP streamable-HTTP response.
+
+    The server may answer with plain JSON or a text/event-stream body whose
+    ``data:`` line carries the JSON-RPC message. Both decode to the same dict.
+    """
+    content_type = response.headers.get("content-type", "")
+    if isinstance(content_type, str) and "text/event-stream" in content_type:
+        for line in response.text.splitlines():
+            if line.startswith("data:"):
+                parsed: dict[str, object] = json.loads(line[len("data:"):].strip())
+                return parsed
+        raise ValueError("event-stream response contained no data line")
+    body: dict[str, object] = response.json()
+    return body
+
+
 def _extract_r_ratio(body: dict[str, object]) -> float:
     """Pull the r-ratio out of a brain_health_check response.
 
-    Geometric Brain returns r_ratio either at the top level or nested under
-    the JSON-RPC ``result`` key. If the schema shifts we fail loud rather than
-    silently treating drift as HEALTHY.
+    Geometric Brain returns r_ratio at the top level, nested under the
+    JSON-RPC ``result`` key, or (live server, schema 1.1.x) as a JSON string
+    inside ``result.content[0].text``. If the schema shifts we fail loud
+    rather than silently treating drift as HEALTHY.
     """
     value = body.get("r_ratio")
     if value is None:
         result = body.get("result")
         if isinstance(result, dict):
             value = result.get("r_ratio")
+            if value is None:
+                content = result.get("content")
+                if isinstance(content, list) and content:
+                    first = content[0]
+                    if isinstance(first, dict) and isinstance(first.get("text"), str):
+                        inner = json.loads(first["text"])
+                        if isinstance(inner, dict):
+                            value = inner.get("r_ratio")
     if not isinstance(value, (int, float)):
         raise ValueError(
             f"brain_health_check response missing numeric r_ratio: {body!r}"

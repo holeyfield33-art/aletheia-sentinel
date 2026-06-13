@@ -26,16 +26,14 @@ import datetime
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, field
 from pathlib import Path
 
 # Ensure src/ is on the path when run directly.
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from sentinel.agents.orchestrator import SessionState, SessionResult, StopReason
+from sentinel.agents.orchestrator import SessionResult, SessionState, StopReason
 from sentinel.audit.receipts import ReceiptChain
 from sentinel.benchmark.cases import Case, ExpectedFinding
-from sentinel.benchmark.runner import run_benchmark
 from sentinel.benchmark.scoring import BenchmarkResult, compute_score
 from sentinel.tools.base import ToolResult, ToolStatus
 
@@ -253,7 +251,8 @@ def _render_report(
     ]
 
     for case, res, (iters, acc, rej) in zip(cases, results, session_details):
-        short_desc = case.description[:50] + "..." if len(case.description) > 50 else case.description
+        desc = case.description
+        short_desc = desc[:50] + "..." if len(desc) > 50 else desc
         lines.append(
             f"| {case.case_id} | {short_desc} "
             f"| {res.precision:.2f} | {res.recall:.2f} | {res.f1:.2f} "

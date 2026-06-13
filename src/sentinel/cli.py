@@ -60,6 +60,22 @@ _TOOL_DEF_NETSCAN: dict[str, Any] = {
     },
 }
 
+_TOOL_DEF_CMDLINE: dict[str, Any] = {
+    "name": "volatility.cmdline",
+    "description": (
+        "Recover full process command lines from a memory image (Volatility 3). "
+        "Use to verify the identity and purpose of a suspicious process before "
+        "classifying it -- name and port alone are not sufficient evidence."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "memory_image": {"type": "string", "description": "Path to memory image file."},
+        },
+        "required": ["memory_image"],
+    },
+}
+
 _TOOL_DEF_AMCACHE: dict[str, Any] = {
     "name": "regripper.amcache",
     "description": "Parse Amcache.hve with RegRipper to enumerate executed programs.",
@@ -105,6 +121,7 @@ _TOOL_DEF_PARSE_SECURITY: dict[str, Any] = {
 _TOOL_CATALOG: list[dict[str, Any]] = [
     _TOOL_DEF_PSLIST,
     _TOOL_DEF_NETSCAN,
+    _TOOL_DEF_CMDLINE,
     _TOOL_DEF_AMCACHE,
     _TOOL_DEF_LOG2TIMELINE,
     _TOOL_DEF_PARSE_SECURITY,
@@ -126,6 +143,7 @@ def _build_tool_catalog(
     if evidence_image is not None:
         catalog.append(_TOOL_DEF_PSLIST)
         catalog.append(_TOOL_DEF_NETSCAN)
+        catalog.append(_TOOL_DEF_CMDLINE)
     if evidence_disk is not None:
         catalog.append(_TOOL_DEF_LOG2TIMELINE)
     if evidence_hive is not None:
@@ -733,7 +751,7 @@ def main() -> None:
     run_p.add_argument("case_id", help="Unique identifier for this investigation.")
     run_p.add_argument(
         "--image", metavar="PATH",
-        help="Path to memory image (enables volatility.pslist / netscan).",
+        help="Path to memory image (enables volatility.pslist / netscan / cmdline).",
     )
     run_p.add_argument(
         "--disk", metavar="PATH",

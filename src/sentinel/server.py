@@ -1,6 +1,6 @@
 """FastMCP server exposing typed forensic SIFT tools.
 
-All five tools declare readOnlyHint=True and destructiveHint=False.
+All six tools declare readOnlyHint=True and destructiveHint=False.
 This is the architectural invariant the hackathon brief evaluates:
 the MCP tool surface contains zero destructive operations.
 """
@@ -16,6 +16,7 @@ from mcp.types import ToolAnnotations
 from sentinel.tools.evtxecmd_security import EvtxSecurityInput, evtxecmd_security
 from sentinel.tools.plaso_log2timeline import Log2TimelineInput, plaso_log2timeline
 from sentinel.tools.regripper_amcache import AmcacheInput, regripper_amcache
+from sentinel.tools.volatility_cmdline import CmdlineInput, volatility_cmdline
 from sentinel.tools.volatility_netscan import NetscanInput, volatility_netscan
 from sentinel.tools.volatility_pslist import PslistInput, volatility_pslist
 
@@ -48,6 +49,22 @@ async def _volatility_pslist(
 async def _volatility_netscan(memory_image: Path) -> dict[str, Any]:
     inp = NetscanInput(memory_image=memory_image)
     result = await volatility_netscan(inp)
+    return result.model_dump(mode="json")
+
+
+@server.tool(
+    name="volatility.cmdline",
+    description=(
+        "Recover full process command lines from a memory image using "
+        "Volatility 3 windows.cmdline. Use to verify the identity of a "
+        "suspicious process before classifying it."
+    ),
+    annotations=_RO,
+    structured_output=False,
+)
+async def _volatility_cmdline(memory_image: Path) -> dict[str, Any]:
+    inp = CmdlineInput(memory_image=memory_image)
+    result = await volatility_cmdline(inp)
     return result.model_dump(mode="json")
 
 

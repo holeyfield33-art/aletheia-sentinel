@@ -22,7 +22,7 @@ from sentinel.tools.base import ToolResult, ToolStatus
 
 
 def test_catalog_memory_only_has_volatility_tools() -> None:
-    """Only pslist and netscan when only a memory image is provided."""
+    """pslist, netscan, and cmdline when only a memory image is provided."""
     catalog = _build_tool_catalog(
         evidence_image=Path("/mem.img"),
         evidence_disk=None,
@@ -30,7 +30,7 @@ def test_catalog_memory_only_has_volatility_tools() -> None:
         evidence_evtx=None,
     )
     names = {t["name"] for t in catalog}
-    assert names == {"volatility.pslist", "volatility.netscan"}
+    assert names == {"volatility.pslist", "volatility.netscan", "volatility.cmdline"}
 
 
 def test_catalog_hive_only_has_amcache() -> None:
@@ -92,6 +92,7 @@ def test_catalog_all_evidence_has_all_tools() -> None:
     assert names == {
         "volatility.pslist",
         "volatility.netscan",
+        "volatility.cmdline",
         "regripper.amcache",
         "plaso.log2timeline",
         "evtxecmd.parse_security",
