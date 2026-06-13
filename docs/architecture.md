@@ -55,7 +55,7 @@ All calls are Pydantic-validated. No raw shell access.
 |----------|--------|--------|-----------|-------------|-------|
 | MCP tool call | Orchestrator | MCP Server | in-process | Trusted | Typed Pydantic arguments; no shell interpolation |
 | SIFT subprocess | MCP Server | OS process | outbound | Untrusted output | Stdout is parsed into structured types before crossing back |
-| LLM API | Scout / Nitpicker / Judge | External LLM | outbound | Semi-trusted | Outputs are validated against typed schemas; unsupported claims are rejected by the Nitpicker's evidence-grounded review; the spectral gate adds an advisory confidence annotation |
+| LLM API | Scout / Nitpicker / Judge | External LLM | outbound | Semi-trusted | Outputs are validated against typed schemas; classification is bounded by the Scout's identity-verification rule and the Judge's evidence-bounded synthesis, with the Nitpicker as a consistency reviewer; the spectral gate adds an advisory confidence annotation |
 | Spectral gate | Orchestrator | geometric-brain-mcp.onrender.com | outbound HTTPS | External service | Response validated for numeric `r_ratio`; missing field raises ValueError, not silent HEALTHY; network failure returns CAUTION |
 | Evidence images | MCP Server | Disk | read-only | Untrusted data | Never committed to git; never sent to LLM directly |
 | Receipt chain | Orchestrator | Memory / disk | internal | Trusted at write, verified at read | `verify()` re-validates HMAC and hash pointers before final report |
@@ -105,8 +105,9 @@ degenerate generation at the tested scales (AUROC ~0.5-0.7; see the
 is a deterministic, fully-tested mechanical guard, but on live runs the gate
 returns CAUTION in practice (text-proxy r clusters at 0.41-0.43; errors
 degrade to CAUTION), so it annotates confidence rather than deciding
-acceptance. The reliable self-correction path is the Nitpicker's
-evidence-grounded review.
+acceptance. The reliable evidence-discipline path is the Scout's
+identity-verification rule combined with the Judge's evidence-bounded
+synthesis; the Nitpicker is a consistency reviewer, not an evidence gate.
 
 ## Measurement
 
