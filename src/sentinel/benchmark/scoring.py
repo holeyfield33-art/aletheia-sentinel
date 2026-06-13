@@ -92,19 +92,51 @@ def compute_score(
 
 
 def _matches(exp: ExpectedFinding, rep: ToolResult) -> bool:
-    """Return True if every key_field in exp is satisfied by rep's payload."""
-    payload = rep.payload or {}
-    for key, expected_val in exp.key_fields.items():
-        actual = payload.get(key)
+    """Return True if every key_field in exp is satisfied anywhere in rep's payload.
+
+    Performs a depth-first search so fields nested inside tool-specific list
+    payloads (e.g. ``{"processes": [{"pid": 1234, "name": "..."}]}``) are
+    matched correctly.  All key_fields must be satisfied within the *same*
+    nested record -- a pid from one process entry cannot satisfy a name from
+    another.
+    """
+    payload: dict[str, object] = rep.payload or {}
+    return _deep_record_matches(exp.key_fields, payload)
+
+
+def _field_value_matches(expected_val: str, actual: object) -> bool:
+    """Compare one expected string value against an actual payload value."""
+    if isinstance(actual, (int, float)) and not isinstance(actual, bool):
+        try:
+            return float(expected_val) == float(actual)
+        except ValueError:
+            return False
+    return expected_val in str(actual)
+
+
+def _record_matches(key_fields: dict[str, str], record: dict[str, object]) -> bool:
+    """Return True if every key_field is satisfied within a single flat record."""
+    for key, expected_val in key_fields.items():
+        actual = record.get(key)
         if actual is None:
             return False
-        if isinstance(actual, (int, float)) and not isinstance(actual, bool):
-            try:
-                if float(expected_val) != float(actual):
-                    return False
-            except ValueError:
-                return False
-        else:
-            if expected_val not in str(actual):
-                return False
+        if not _field_value_matches(expected_val, actual):
+            return False
     return True
+
+
+def _deep_record_matches(key_fields: dict[str, str], node: object) -> bool:
+    """Depth-first search: True if any dict node in the structure satisfies all key_fields."""
+    if not key_fields:
+        return True
+    if isinstance(node, dict):
+        if _record_matches(key_fields, node):
+            return True
+        for v in node.values():
+            if _deep_record_matches(key_fields, v):
+                return True
+    elif isinstance(node, list):
+        for item in node:
+            if _deep_record_matches(key_fields, item):
+                return True
+    return False
