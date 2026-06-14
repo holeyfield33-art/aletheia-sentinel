@@ -24,16 +24,16 @@ loop (Scout plans, Nitpicker reviews, Judge synthesizes) triages a memory or
 disk image and produces an incident report where every claim is backed by a
 cryptographically-receipted tool execution.
 
-Validated on real SANS SRL-2018 evidence across three hosts (wkstn-01, rd01,
-wkstn-05) linked by a shared C2 (`172.16.4.10:8080`) and a proven directional
-lateral link (rd01 -> wkstn-05 via inbound SMB) -- a documented multi-host,
+Validated on real SANS SRL-2018 evidence across two hosts (rd01, wkstn-05)
+linked by a shared C2 (`172.16.4.10:8080`) and a proven directional lateral
+link (rd01 -> wkstn-05 via inbound SMB) -- a documented multi-host,
 multi-technique campaign. The pipeline surfaced the real implant (`p.exe` in
 `c:\windows\temp\perfmon`), the WMI->PowerShell->rundll32 beacon chains, and
 caught its own false positive: a binary first flagged as a backdoor was
 correctly identified as F-Response forensic tooling on rd01 from its own
-network activity and command line -- a trap that recurred on all three hosts,
+network activity and command line -- a trap that recurred on both hosts,
 resolved where the identifying evidence was present and held as "suspicious
-pending verification" where it was absent. All three receipt chains verify. Findings were independently verified
+pending verification" where it was absent. Both receipt chains verify. Findings were independently verified
 against raw Volatility output. See the
 [accuracy report](docs/accuracy-report.md).
 
