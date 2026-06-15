@@ -130,7 +130,7 @@ All three checks pass on this revision:
 
 ```bash
 ruff check src tests   # All checks passed!
-mypy                   # Success: no issues found in 39 source files
+mypy                   # Success: no issues found in 43 source files
 pytest                 # 153 passed
 ```
 

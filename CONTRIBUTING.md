@@ -29,9 +29,9 @@ sentinel demo
 
 ## Adding a new SIFT tool wrapper
 
-Five existing wrappers are templates:
+Six existing wrappers are templates:
 `src/sentinel/tools/volatility_pslist.py`,
-`volatility_netscan.py`, `regripper_amcache.py`,
+`volatility_netscan.py`, `volatility_cmdline.py`, `regripper_amcache.py`,
 `plaso_log2timeline.py`, `evtxecmd_security.py`.
 
 Steps:
