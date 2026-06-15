@@ -28,7 +28,7 @@ Validated on real SANS SRL-2018 evidence across two hosts (rd01, wkstn-05)
 linked by a shared C2 (`172.16.4.10:8080`) and a proven directional lateral
 link (rd01 -> wkstn-05 via inbound SMB) -- a documented multi-host,
 multi-technique campaign. The pipeline surfaced the real implant (`p.exe` in
-`c:\windows\temp\perfmon`), the WMI->PowerShell->rundll32 beacon chains, and
+`c:\windows\temp\perfmon`), the rd01 WMI->PowerShell->cmd.exe launch chain and wkstn-05 WMI->PowerShell->rundll32 beacon chain, and
 caught its own false positive: a binary first flagged as a backdoor was
 correctly identified as F-Response forensic tooling on rd01 from its own
 network activity and command line -- a trap that recurred on both hosts,

@@ -24,7 +24,7 @@ Verifying with any other secret returns `HMAC signature invalid` (tamper-evidenc
 | srl2018-rd01-1781477951.jsonl | rd01 (172.16.6.11) | 3 | pslist -> cmdline -> netscan |
 | srl2018-wkstn05-1781478098.jsonl | wkstn-05 (172.16.7.15) | 4 | pslist -> netscan -> cmdline x2 |
 
-- rd01 -- evidenced compromise (p.exe implant, WMI->PowerShell->rundll32, C2 172.16.4.10:8080); subject_srv.exe identified as F-Response and excluded from the verdict.
+- rd01 -- evidenced compromise (p.exe implant, WMI->PowerShell->cmd.exe launch chain, C2 172.16.4.10:8080); subject_srv.exe identified as F-Response and excluded from the verdict.
 - wkstn-05 -- same campaign; subject_srv held "suspicious pending verification" where its command line was paged out.
 
 See [../docs/accuracy-report.md](../docs/accuracy-report.md) for the full write-up.
