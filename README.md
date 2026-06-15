@@ -24,6 +24,8 @@ loop (Scout plans, Nitpicker reviews, Judge synthesizes) triages a memory or
 disk image and produces an incident report where every claim is backed by a
 cryptographically-receipted tool execution.
 
+**[Watch the 5-minute demo](https://www.youtube.com/watch?v=L9LSUt68fxM)** -- autonomous Scout->Nitpicker->Judge investigation on real SANS SRL-2018 evidence, with live HMAC receipt-chain verification.
+
 Validated on real SANS SRL-2018 evidence across two hosts (rd01, wkstn-05)
 linked by a shared C2 (`172.16.4.10:8080`) and a proven directional lateral
 link (rd01 -> wkstn-05 via inbound SMB) -- a documented multi-host,
@@ -99,16 +101,16 @@ absent.
 
 ```mermaid
 graph TD
-    A[Scout Agent\nLLM: plans next tool call] -->|ScoutDecision| B[Orchestrator\ncaps + routing + path pinning]
-    B -->|tool_name + args| C[MCP Server\ntyped tool surface]
+    A[Scout Agent<br/>LLM: plans next tool call] -->|ScoutDecision| B[Orchestrator<br/>caps + routing + path pinning]
+    B -->|tool_name + args| C[MCP Server<br/>typed tool surface]
     C -->|parsed ToolResult| B
-    B -->|append| D[Receipt Chain\nHMAC + hash-linked]
-    B -->|ToolResult| E[Nitpicker Agent\nLLM: consistency review]
+    B -->|append| D[Receipt Chain<br/>HMAC + hash-linked]
+    B -->|ToolResult| E[Nitpicker Agent<br/>LLM: consistency review]
     E -->|accepted / rejected| B
-    B -.->|reasoning text| F[Spectral Gate\nadvisory confidence]
+    B -.->|reasoning text| F[Spectral Gate<br/>advisory confidence]
     F -.->|SpectralHealth| B
-    B -->|accepted findings| G[Judge Agent\nLLM: synthesize report]
-    G -->|SessionResult| H[Signed Report]
+    B -->|accepted findings| G[Judge Agent<br/>LLM: synthesize report]
+    G -->|SessionResult| H[Receipt-Sealed Report]
 
     subgraph SIFT Workstation
         C --> I[volatility]
@@ -129,7 +131,7 @@ All three checks pass on this revision:
 ```bash
 ruff check src tests   # All checks passed!
 mypy                   # Success: no issues found in 39 source files
-pytest                 # 133 passed
+pytest                 # 153 passed
 ```
 
 ## Part of the Aletheia ecosystem

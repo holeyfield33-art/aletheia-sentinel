@@ -16,7 +16,7 @@ export ALETHEIA_RECEIPT_SECRET="$(python -c 'import secrets; print(secrets.token
 All three checks must pass before any commit:
 
 ```bash
-python -m pytest                     # 101+ tests, all green
+python -m pytest                     # 153 tests, all green
 python -m mypy                       # Success: no issues found
 python -m ruff check src tests       # All checks passed!
 ```

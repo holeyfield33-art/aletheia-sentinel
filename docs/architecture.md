@@ -4,16 +4,16 @@
 
 ```mermaid
 flowchart TD
-    A[Scout Agent\nLLM: plans next tool call] -->|ScoutDecision| B[Orchestrator\ncaps + routing]
-    B -->|tool_name + args| C[MCP Server\ntyped tool surface]
+    A[Scout Agent<br/>LLM: plans next tool call] -->|ScoutDecision| B[Orchestrator<br/>caps + routing]
+    B -->|tool_name + args| C[MCP Server<br/>typed tool surface]
     C -->|parsed ToolResult| B
-    B -->|append| D[Receipt Chain\nHMAC + hash-linked]
-    B -->|ToolResult| E[Nitpicker Agent\nLLM: consistency review]
+    B -->|append| D[Receipt Chain<br/>HMAC + hash-linked]
+    B -->|ToolResult| E[Nitpicker Agent<br/>LLM: consistency review]
     E -->|NitpickerReview| B
-    B -->|reasoning text| F[Spectral Gate\nGeometric Brain MCP]
+    B -->|reasoning text| F[Spectral Gate<br/>Geometric Brain MCP]
     F -->|SpectralHealth| B
-    B -->|accepted findings| G[Judge Agent\nLLM: synthesize report]
-    G -->|SessionResult| H[Signed Report]
+    B -->|accepted findings| G[Judge Agent<br/>LLM: synthesize report]
+    G -->|SessionResult| H[Receipt-Sealed Report]
 
     subgraph SIFT Workstation
         C --> I[volatility]
