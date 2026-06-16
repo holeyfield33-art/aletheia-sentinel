@@ -91,3 +91,7 @@ Tools executed: `volatility.pslist` (with psscan fallback), `volatility.netscan`
 cmdline). Verifiable chains are committed to `submission-logs/`. Images are available
 through the SANS SRL-2018 hackathon starter resources; install Volatility 3
 (`pip install volatility3`) and run `sentinel run <case> --image <image>.img`.
+
+The live demo-video run is committed as `submission-logs/srl2018-rd01-live-1781580663.jsonl`
+and can be independently verified (see "Verify the demo run" in
+[accuracy-report.md](accuracy-report.md)).
