@@ -28,3 +28,19 @@ Verifying with any other secret returns `HMAC signature invalid` (tamper-evidenc
 - wkstn-05 -- same campaign; subject_srv held "suspicious pending verification" where its command line was paged out.
 
 See [../docs/accuracy-report.md](../docs/accuracy-report.md) for the full write-up.
+
+## rd01-live (live agent run, June 15 2026)
+
+Full autonomous `sentinel run` against the real SRL-2018 rd01 memory image
+(`base-rd01-memory.img`). Three receipts: volatility.pslist, volatility.cmdline,
+volatility.netscan. This is the run shown in the demo video.
+
+Verify:
+
+    export ALETHEIA_RECEIPT_SECRET=2f95697099e2b698b591a5557012e81f273722cad98c8cfd9a3fed0cbe8ae92c
+    sentinel verify submission-logs/srl2018-rd01-live-1781580663.jsonl
+
+Expected: `Chain valid: 3 receipts`. Findings: p.exe implant staged in
+c:\windows\temp\perfmon via WMI->PowerShell->cmd.exe; C2 to 172.16.4.10:8080;
+subject_srv.exe correctly identified as F-Response DFIR tooling and excluded
+from the verdict.
