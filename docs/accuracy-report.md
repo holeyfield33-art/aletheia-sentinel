@@ -200,3 +200,17 @@ substitute for the real-evidence results above. Full methodology:
   `ANTHROPIC_API_KEY`, then `sentinel run <case> --image <image>.img` and
   `sentinel verify audit-logs/<chain>.jsonl`. Spectral gate is off by default.
 - Dataset provenance: [dataset-documentation.md](dataset-documentation.md).
+
+### Verify the demo run
+
+The exact run shown in the demo video is committed as a verifiable receipt chain.
+Anyone can confirm it was not altered:
+
+    export ALETHEIA_RECEIPT_SECRET=2f95697099e2b698b591a5557012e81f273722cad98c8cfd9a3fed0cbe8ae92c
+    sentinel verify submission-logs/srl2018-rd01-live-1781580663.jsonl
+
+Expected output: `Chain valid: 3 receipts`. Tampering with any byte, or using the
+wrong secret, yields `Chain INVALID: HMAC signature invalid`. The chain covers the
+volatility.pslist -> netscan -> cmdline sequence that produced the rd01 verdict
+(p.exe implant via WMI->PowerShell->cmd.exe, C2 to 172.16.4.10:8080, subject_srv.exe
+cleared as F-Response tooling).
